@@ -1,0 +1,17 @@
+# Tatha - 九库 + API（版本可随需收紧）
+litellm>=1.0.0
+markitdown>=0.0.1
+llama-index>=0.10.0
+llama-index-core>=0.10.0
+llama-index-embeddings-openai
+llama-index-vector-stores-faiss
+pydantic-ai>=0.0.1
+pydantic>=2.0
+marvin>=2.0.0
+haystack-ai>=2.0.0
+tiktoken>=0.5.0
+faiss-cpu>=1.7.0
+pydantic-evals>=0.0.1
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+python-dotenv>=1.0.0
