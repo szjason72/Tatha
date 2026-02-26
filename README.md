@@ -107,6 +107,17 @@ Tatha/
 - **触发**：`POST /v1/ask` 意图为 `job_match` 时需提供简历（`resume_text` 或 `context.resume_text`）；或直接 `POST /v1/jobs/match`，body `{"resume_text": "..."}`。
 - **代码**：`tatha.jobs`（`sources`、`scoring`、`pipeline`）。
 
+### Resume → Job → Company E2E 测试流程
+
+业务流程：用户先找岗位（简历 → 职位匹配）→ 得到高分段岗位后，再关心**该公司**经营/征信，辅助是否投递。三阶段对应：
+
+1. **Resume**：简历输入（文件经 MarkItDown 转 Markdown，或直接文本）。
+2. **Job**：`run_job_match_pipeline(resume_text)` 或 `POST /v1/jobs/match`，得到带 `job.company` 的匹配列表。
+3. **Company**：对匹配结果中的公司做征信解析（主体明确为该公司），`run_credit_analysis(...)` 或 `POST /v1/ask` 带征信意图与公司名。
+
+- **本地脚本**（不依赖已启动 API）：`uv run python scripts/test_resume_job_company_flow.py [简历文件路径]`，默认用内置简历摘要，依次执行三阶段并断言。
+- **HTTP 串联**（需先启动 API）：`./scripts/test_improvements.sh` 中 **§12** 用 `POST /v1/jobs/match` 得到首条匹配公司，再 `POST /v1/ask` 查该公司征信并校验 `intent=credit`、`extracted.entity_name`。
+
 ### LlamaIndex：私有数据接入与 RAG
 
 数据源（尤其简历等个人信息）需隐私保护，索引与向量仅存于本地配置目录，不提交仓库。
@@ -116,7 +127,8 @@ Tatha/
 - **命名空间**：按 `namespace` 隔离（如 `resume`、`poetry`），便于多类数据与多租户。
 - **构建索引**：
   - `build_index_from_dir("./docs", namespace="resume")`：从目录读取所有文档并建索引；
-  - `build_index_from_documents(docs, namespace="resume")`：从内存文档（如上传转 Markdown 后）建索引，可不落盘原文。
+  - `build_index_from_documents(docs, namespace="resume")`：从内存文档（如上传转 Markdown 后）建索引，可不落盘原文；
+  - **诗词索引**：`uv run python scripts/build_poetry_index.py [--max-docs N]` 从本地 **poetry-knowledge-base** 项目（与 Tatha 同级目录）的 `poems/poems_annotated.json`（或 `poems_index.json`）构建 `namespace=poetry` 的索引；数据源默认 `../poetry-knowledge-base/poems/`，可通过 `TATHA_POETRY_INDEX_SOURCE` 指定 JSON 路径；`--max-docs 500` 可先建小索引做测试。
 - **查询**：`get_query_engine(namespace="resume").query("总结文档的核心观点")`，或调用 `POST /v1/rag/query`，body `{"namespace": "resume", "query": "..."}`。
 - **LLM 统一切换**：RAG 回答使用的 LLM 由 **LiteLLM** + `TATHA_DEFAULT_MODEL` 提供（如 `deepseek/deepseek-chat`），与意图解析、PydanticAI 一致。索引用的 **embedding** 单独配置：`TATHA_EMBED_MODEL=local`（默认，本地 HuggingFace，无需 API Key，适配仅配 DeepSeek）或 `openai`；`TATHA_EMBED_DIM` 需与所选 embed 一致（local 默认 384，openai 默认 1536）。代码入口：`tatha.retrieval`。
 

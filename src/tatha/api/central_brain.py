@@ -109,6 +109,28 @@ def _document_analysis(document_type: str, text: str) -> dict[str, Any] | None:
     return None
 
 
+def _credit_has_document_body(text: str) -> bool:
+    """
+    判断是否为「信用报告/文档片段」而非短句查询。
+    仅当文本像报告内容（含主体/报告类型/摘要等，或足够长）时才返回 True，
+    避免把「查一下征信」等短句当正文解析导致结果不稳定。
+    """
+    if not (text and text.strip()):
+        return False
+    t = text.strip()
+    # 过短且无报告特征：视为查询语
+    if len(t) < 25:
+        return False
+    # 含报告常见字段/用语则视为有正文
+    report_markers = ("主体", "报告类型", "摘要", "信用报告", "信用代码", "信用等级", "经营状态", "无不良")
+    if any(m in t for m in report_markers):
+        return True
+    # 较长且含「信用/征信」可能是一段描述
+    if len(t) >= 40 and ("信用" in t or "征信" in t):
+        return True
+    return False
+
+
 def _ensure_extractors_loaded() -> None:
     """懒加载：若尚未根据 schema 生产函数，则加载默认或配置的 schema 并生产。"""
     from tatha.ai.fn_from_schema import REGISTRY
@@ -175,7 +197,8 @@ def dispatch(intent: str, request: AskRequest, slots: dict[str, Any] | None = No
                 return {"message": "诗词解析失败", "status": "error", "error": str(e), "slots": slots}
         return {"message": "诗人/诗词推荐开发中", "status": "pending", "hint": "将接入 poetry-knowledge-base RAG", "slots": slots}
     if intent == "credit":
-        if text:
+        # 仅当消息像「信用报告/文档片段」时才调用解析；短句查询（如「查一下征信」）视为无正文
+        if _credit_has_document_body(text):
             try:
                 extracted = _document_analysis("credit", text)
                 if extracted is not None:
@@ -183,7 +206,7 @@ def dispatch(intent: str, request: AskRequest, slots: dict[str, Any] | None = No
                 return {"message": "征信解析未返回结果", "status": "pending", "hint": "请检查 API Key 与 TATHA_DOCUMENT_ANALYSIS_BACKEND", "slots": slots}
             except Exception as e:
                 return {"message": "征信解析失败", "status": "error", "error": str(e), "slots": slots}
-        return {"message": "征信/验证服务开发中", "status": "pending", "slots": slots}
+        return {"message": "征信/验证服务开发中", "status": "pending", "hint": "请提供信用报告摘要或主体/报告类型/摘要等文本后再解析", "slots": slots}
     if intent == "mbti":
         return {"message": "职业人格测评开发中", "status": "pending", "slots": slots}
     return {"message": "暂未识别到明确意图", "status": "unknown", "received": (request.message or "")[:100]}
