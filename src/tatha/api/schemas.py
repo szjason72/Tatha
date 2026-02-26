@@ -8,7 +8,8 @@ from typing import Any, Optional
 class AskRequest(BaseModel):
     """用户/助理发往中央大脑的请求。"""
     message: str = Field(..., description="用户输入或意图描述")
-    context: Optional[dict[str, Any]] = Field(default_factory=dict, description="可选上下文（user_id、session_id 等）")
+    context: Optional[dict[str, Any]] = Field(default_factory=dict, description="可选上下文（user_id、session_id、resume_text 等）")
+    resume_text: Optional[str] = Field(None, description="可选：用于 job_match 的简历全文，也可放在 context.resume_text")
 
 
 class AskResponse(BaseModel):
@@ -37,3 +38,18 @@ class RagQueryResponse(BaseModel):
     answer: str = Field(..., description="基于私有索引检索后的回答")
     namespace: str = Field(..., description="查询的命名空间")
     error: str | None = Field(None, description="查询失败时的错误信息")
+
+
+class JobMatchRequest(BaseModel):
+    """POST /v1/jobs/match 请求（也可通过 /v1/ask 的 job_match 意图触发）。"""
+    resume_text: str = Field(..., description="简历全文或摘要")
+    top_n: Optional[int] = Field(5, ge=1, le=20, description="返回前 N 条匹配")
+    source: Optional[str] = Field(None, description="职位源：mock | apify_linkedin，不传用配置")
+
+
+class JobMatchResponse(BaseModel):
+    """POST /v1/jobs/match 响应。"""
+    matches: list[dict[str, Any]] = Field(default_factory=list, description="按综合分排序的匹配列表")
+    total_evaluated: int = Field(0, description="参与打分的职位数")
+    message: Optional[str] = None
+    error: Optional[str] = None

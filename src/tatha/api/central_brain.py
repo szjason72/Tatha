@@ -128,7 +128,33 @@ def dispatch(intent: str, request: AskRequest, slots: dict[str, Any] | None = No
     text = (request.message or "").strip() or (slots.get("text") or slots.get("content") or "")
 
     if intent == "job_match":
-        return {"message": "匹配服务开发中", "status": "pending", "hint": "V0 将接入职位匹配 API", "slots": slots}
+        resume_text = (
+            (request.resume_text or "").strip()
+            or (request.context or {}).get("resume_text") or ""
+            or (slots.get("resume_text") or slots.get("resume") or "")
+        )
+        if not resume_text:
+            return {
+                "message": "请先提供简历内容",
+                "status": "pending",
+                "hint": "可通过上传简历（POST /v1/documents/convert）或在本请求中传入 resume_text / context.resume_text",
+                "slots": slots,
+            }
+        try:
+            from tatha.jobs import run_job_match_pipeline
+            from tatha.core.config import job_top_n
+
+            results, total = run_job_match_pipeline(resume_text=resume_text, top_n=job_top_n())
+            matches = [r.model_dump() for r in results]
+            return {
+                "message": "已根据简历完成职位匹配",
+                "status": "ok",
+                "matches": matches,
+                "total_evaluated": total,
+                "slots": slots,
+            }
+        except Exception as e:
+            return {"message": "职位匹配失败", "status": "error", "error": str(e), "slots": slots}
     if intent == "resume_upload":
         if text:
             try:

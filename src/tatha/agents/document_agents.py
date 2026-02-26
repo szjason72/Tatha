@@ -75,25 +75,25 @@ def run_resume_analysis(text: str) -> ResumeAnalysis:
     """简历解读：类型安全，返回 ResumeAnalysis。"""
     agent = _get_agent("resume")
     result = agent.run_sync(text)
-    return result.data
+    return result.output
 
 
 def run_poetry_analysis(text: str) -> PoetryAnalysis:
     """诗词/赏析解读：类型安全，返回 PoetryAnalysis。"""
     agent = _get_agent("poetry")
     result = agent.run_sync(text)
-    return result.data
+    return result.output
 
 
 def run_credit_analysis(text: str) -> CreditAnalysis:
     """征信文本解读：类型安全，返回 CreditAnalysis。"""
     agent = _get_agent("credit")
     result = agent.run_sync(text)
-    return result.data
+    return result.output
 
 
 def run_document_analysis(document_type: str, text: str) -> ResumeAnalysis | PoetryAnalysis | CreditAnalysis:
     """统一入口：按 document_type 调用对应智能体，返回类型化结果。"""
     agent = _get_agent(document_type)
     result = agent.run_sync(text)
-    return result.data
+    return result.output

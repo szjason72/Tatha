@@ -14,6 +14,8 @@ from .schemas import (
     AskRequest,
     AskResponse,
     DocumentConvertResponse,
+    JobMatchRequest,
+    JobMatchResponse,
     RagQueryRequest,
     RagQueryResponse,
 )
@@ -83,6 +85,28 @@ async def documents_convert(
         document_type=dtype,
         extracted=extracted,
     )
+
+
+@app.post("/v1/jobs/match", response_model=JobMatchResponse)
+def jobs_match(request: JobMatchRequest):
+    """
+    职位匹配流水线：拉取职位 → 简历 vs 职位 LLM 打分 → 按综合分排序返回 Top-N。
+    职位源默认 mock（示例数据）；配置 TATHA_JOB_SOURCE=apify_linkedin 与 APIFY_API_KEY 可使用 LinkedIn 抓取。
+    """
+    try:
+        from tatha.jobs import run_job_match_pipeline
+
+        results, total = run_job_match_pipeline(
+            resume_text=request.resume_text,
+            top_n=request.top_n,
+            source_id=request.source,
+        )
+        return JobMatchResponse(
+            matches=[r.model_dump() for r in results],
+            total_evaluated=total,
+        )
+    except Exception as e:
+        return JobMatchResponse(matches=[], total_evaluated=0, error=str(e))
 
 
 @app.post("/v1/rag/query", response_model=RagQueryResponse)

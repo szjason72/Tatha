@@ -55,6 +55,7 @@ Tatha/
         ├── ingest/         # MarkItDown + LlamaIndex 文档接入
         ├── agents/         # PydanticAI / Marvin 分析与提取
         ├── retrieval/      # 向量索引与检索（LlamaIndex + FAISS）
+        ├── jobs/           # 职位匹配流水线（职位源 + LLM 打分）
         ├── evals/          # Pydantic Evals 回归用例
         └── api/             # HTTP 入口（供助理 Tool 调用）
 ```
@@ -96,6 +97,15 @@ Tatha/
 4. **说明**：扫描件或复杂图片表格效果会有波动，主要处理文字层。
 
 示例：`curl -X POST http://127.0.0.1:8010/v1/documents/convert -F "file=@resume.pdf" -F "document_type=resume"`。代码入口：`tatha.ingest.markitdown_convert`。
+
+### 职位匹配流水线（job_match）
+
+在 Tatha 内自建「抓职位 + 简历 vs 职位 LLM 打分 + 排序 Top-N」闭环，借鉴 Argus（职位源）与 DailyJobMatch（打分结构）。
+
+- **职位源**：`mock`（默认，5 条示例职位，无需 API Key）或 `apify_linkedin`（需 `APIFY_API_KEY`，从 Apify LinkedIn Job Scraper 拉取）。配置 `TATHA_JOB_SOURCE`、可选 `TATHA_JOB_TOP_N`（默认 5）。
+- **打分**：PydanticAI Agent 对「简历 + 职位描述」做多维度打分（`JobMatchScore`：overall、skills_overlap、experience_relevance 等），LiteLLM 统一切换模型。
+- **触发**：`POST /v1/ask` 意图为 `job_match` 时需提供简历（`resume_text` 或 `context.resume_text`）；或直接 `POST /v1/jobs/match`，body `{"resume_text": "..."}`。
+- **代码**：`tatha.jobs`（`sources`、`scoring`、`pipeline`）。
 
 ### LlamaIndex：私有数据接入与 RAG
 

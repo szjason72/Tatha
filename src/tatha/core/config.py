@@ -57,6 +57,19 @@ def embed_model_type() -> str:
     return (os.getenv("TATHA_EMBED_MODEL") or "local").strip().lower()
 
 
+def job_source_id() -> str:
+    """职位源：mock（默认，无需 Key）| apify_linkedin（需 APIFY_API_KEY）。"""
+    return (os.getenv("TATHA_JOB_SOURCE") or "mock").strip().lower()
+
+
+def job_top_n() -> int:
+    """匹配结果返回条数，默认 5。"""
+    try:
+        return max(1, min(20, int(os.getenv("TATHA_JOB_TOP_N", "5"))))
+    except ValueError:
+        return 5
+
+
 def get_index_storage_root() -> Path:
     """
     私有索引存储根目录（简历等敏感数据仅存于此，不提交到仓库）。
