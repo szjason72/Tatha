@@ -6,6 +6,7 @@
 LLM 失败时的回退，保证链路可跑通。
 """
 import json
+import random
 import re
 from typing import Any
 
@@ -24,6 +25,19 @@ INTENT_KEYWORDS = {
     "credit": ["征信", "信用", "验证"],
     "mbti": ["人格", "MBTI", "测评", "性格"],
 }
+
+# 诗词推荐时随机注入主题，避免「推荐一句诗」总返回同一首、结果跑空
+POETRY_RECOMMEND_THEMES = ("思乡", "送别", "山水", "边塞", "咏物", "励志", "田园", "怀古")
+
+
+def _poetry_is_recommendation_query(text: str) -> bool:
+    """
+    判断是否为「推荐一句诗」类短句（无诗词正文），以便注入随机主题，让推荐结果多样化。
+    """
+    if not (text and text.strip()) or len(text.strip()) > 80:
+        return False
+    t = text.strip()
+    return bool(re.search(r"推荐|来一句|来首|随便.*诗|一句诗", t))
 
 
 def _parse_intent_llm(message: str) -> tuple[str, float, dict[str, Any]] | None:
@@ -189,10 +203,15 @@ def dispatch(intent: str, request: AskRequest, slots: dict[str, Any] | None = No
         return {"message": "简历上传与解析服务开发中", "status": "pending", "hint": "V0 将接入 MarkItDown + 解析", "slots": slots}
     if intent == "poetry":
         if text:
+            prompt = text
+            if _poetry_is_recommendation_query(text):
+                theme = random.choice(POETRY_RECOMMEND_THEMES)
+                prompt = f"请推荐一句古诗，主题倾向：{theme}。推荐后请以诗词解析格式返回该诗的标题、作者、朝代、正文与主题。"
             try:
-                extracted = _document_analysis("poetry", text)
+                extracted = _document_analysis("poetry", prompt)
                 if extracted is not None:
                     return {"message": "已解析诗词相关信息", "status": "ok", "extracted": extracted, "slots": slots}
+                return {"message": "诗词解析未返回结果", "status": "pending", "hint": "请检查 .env 中 API Key 与 TATHA_DOCUMENT_ANALYSIS_BACKEND，或稍后重试", "slots": slots}
             except Exception as e:
                 return {"message": "诗词解析失败", "status": "error", "error": str(e), "slots": slots}
         return {"message": "诗人/诗词推荐开发中", "status": "pending", "hint": "将接入 poetry-knowledge-base RAG", "slots": slots}
@@ -208,7 +227,36 @@ def dispatch(intent: str, request: AskRequest, slots: dict[str, Any] | None = No
                 return {"message": "征信解析失败", "status": "error", "error": str(e), "slots": slots}
         return {"message": "征信/验证服务开发中", "status": "pending", "hint": "请提供信用报告摘要或主体/报告类型/摘要等文本后再解析", "slots": slots}
     if intent == "mbti":
-        return {"message": "职业人格测评开发中", "status": "pending", "slots": slots}
+        from tatha.agents.mbti_analyzer import MBTITextAnalyzer, MIN_TEXT_LENGTH
+        from tatha.agents.mbti_career_match import get_career_match
+
+        if text and len(text.strip()) >= MIN_TEXT_LENGTH:
+            try:
+                analyzer = MBTITextAnalyzer()
+                analysis = analyzer.analyze_text(text)
+                if analysis.get("mbti_type") and analysis["mbti_type"] != "XXXX":
+                    career = get_career_match(analysis["mbti_type"])
+                    extracted = {**analysis, "career_match": career}
+                    return {
+                        "message": "已根据您的描述完成性格分析并给出职业建议",
+                        "status": "ok",
+                        "extracted": extracted,
+                        "slots": slots,
+                    }
+                return {
+                    "message": "已分析性格维度，建议补充更多描述以获得更稳定类型",
+                    "status": "ok",
+                    "extracted": analysis,
+                    "slots": slots,
+                }
+            except Exception as e:
+                return {"message": "人格测评分析失败", "status": "error", "error": str(e), "slots": slots}
+        return {
+            "message": "职业人格测评已就绪",
+            "status": "pending",
+            "hint": "请描述您的做事风格或发一段自述（至少20字），我会帮您分析性格类型并给出职业建议",
+            "slots": slots,
+        }
     return {"message": "暂未识别到明确意图", "status": "unknown", "received": (request.message or "")[:100]}
 
 

@@ -34,7 +34,10 @@ def run_job_match_pipeline(
 
     results: list[MatchResult] = []
     for job in jobs:
+        # 拼入工作地点，供「钱多事少离家近」中「离家近」维度打分
         jd = (job.description or f"{job.title} @ {job.company}").strip()
+        if job.location:
+            jd = f"工作地点：{job.location}\n\n{jd}"
         score = score_resume_vs_job(resume_text, jd)
         results.append(MatchResult(job=job, score=score))
 

@@ -127,4 +127,32 @@ if r.get('status') == 'ok':
 " || exit 1
 
 echo ""
+echo "=== 13. 单入口 /v1/ask - MBTI 人格测评（无正文 → pending；带自述 → 分析+职业建议）==="
+echo "13a. MBTI 意图无正文（应 pending + hint）"
+R13a=$(curl -s -X POST "$BASE/v1/ask" -H "Content-Type: application/json" -d '{"message":"测一下人格"}')
+echo "$R13a" | python3 -m json.tool
+echo "$R13a" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('intent') == 'mbti', '意图应为 mbti'
+r = d.get('result') or {}
+assert r.get('status') == 'pending', '无正文时应 pending'
+assert r.get('hint'), '应有 hint 引导用户发自述'
+" || exit 1
+echo "13b. MBTI 意图带自述（应 ok + extracted 含 mbti_type、career_match）"
+R13b=$(curl -s -X POST "$BASE/v1/ask" -H "Content-Type: application/json" \
+  -d '{"message":"帮我分析一下性格：我喜欢独立思考问题，注重逻辑和细节，做事有计划，喜欢按步骤完成目标，比较理性。"}')
+echo "$R13b" | python3 -m json.tool
+echo "$R13b" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d.get('intent') == 'mbti', '意图应为 mbti'
+r = d.get('result') or {}
+assert r.get('status') == 'ok', '带自述时应 ok'
+e = r.get('extracted') or {}
+assert e.get('mbti_type') and e['mbti_type'] != 'XXXX', '应有有效 mbti_type'
+assert e.get('career_match'), '应有 career_match 职业建议'
+" || exit 1
+
+echo ""
 echo "=== 测试完成 ==="

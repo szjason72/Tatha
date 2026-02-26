@@ -19,7 +19,7 @@ class JobInfo(BaseModel):
 class JobMatchScore(BaseModel):
     """
     简历与职位的匹配打分（LLM 输出，PydanticAI 数据边界）。
-    维度参考 DailyJobMatch，总分 0–100。
+    维度参考 DailyJobMatch +「钱多事少离家近」：总分 0–100，子维度含薪资/地点/事少。
     """
     overall: int = Field(..., ge=0, le=100, description="综合匹配分 0–100")
     background_match: int = Field(0, ge=0, le=10, description="领域/背景匹配 0–10")
@@ -28,6 +28,10 @@ class JobMatchScore(BaseModel):
     seniority: int = Field(0, ge=0, le=10, description="职级匹配 0–10")
     language_requirement: int = Field(0, ge=0, le=10, description="语言要求匹配 0–10")
     company_score: int = Field(0, ge=0, le=10, description="公司/岗位吸引力 0–10")
+    # 钱多事少离家近（若 JD/简历未提及则打 5 分中性）
+    salary_match: int = Field(5, ge=0, le=10, description="钱多：薪资/待遇匹配 0–10")
+    location_match: int = Field(5, ge=0, le=10, description="离家近：地点/远程偏好匹配 0–10")
+    culture_workload_match: int = Field(5, ge=0, le=10, description="事少：工作强度/弹性/文化匹配 0–10")
     summary: str = Field("", description="一句话匹配摘要")
     keywords: list[str] = Field(default_factory=list, description="匹配关键词")
     fit_bullets: list[str] = Field(default_factory=list, description="匹配要点列表")

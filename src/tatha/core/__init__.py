@@ -9,6 +9,7 @@ from .config import (
     embed_model_type,
 )
 from .llm import completion, ask_ai
+from .tokens import count_tokens, estimate_input_cost
 
 __all__ = [
     "use_llm_intent",
@@ -19,4 +20,6 @@ __all__ = [
     "embed_model_type",
     "completion",
     "ask_ai",
+    "count_tokens",
+    "estimate_input_cost",
 ]

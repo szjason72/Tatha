@@ -24,6 +24,15 @@
 
 详见 [docs/设计说明_九库与Tatha.md](docs/设计说明_九库与Tatha.md)。
 
+### 四类能力落地：Haystack / tiktoken / FAISS / Pydantic Evals
+
+| 能力 | 落地位置 | 用法简述 |
+|------|----------|----------|
+| **tiktoken** | `tatha.core.tokens` | `count_tokens(text, model_name)` 请求前算 token 数；`estimate_input_cost(text, ..., price_per_1k_input)` 估算美元成本，避免超长 Prompt 暴雷。 |
+| **FAISS** | `tatha.retrieval.llama_index_rag` | 通过 LlamaIndex 的 `FaissVectorStore` 做向量索引与检索，`build_index_from_documents` / `get_query_engine`；本地毫秒级相似度搜索，适合简历/诗词等私有数据。 |
+| **Haystack** | `tatha.retrieval.haystack_pipeline` | `build_query_pipeline(template=...)` 组装 PromptBuilder + OpenAIGenerator；`run_query_pipeline(query)` 跑「问题→回答」流水线。可扩展为 Retriever + Reranker + Generator 或对接 Qdrant/Elasticsearch。 |
+| **Pydantic Evals** | `tatha.evals` + `scripts/run_document_evals.py` | `resume_extract_dataset()` / `poetry_extract_dataset()` / `credit_extract_dataset()` 预设 Case；`uv run python scripts/run_document_evals.py [--dataset all|resume|poetry|credit]` 跑回归，改提示词后验证不退化。 |
+
 ### LiteLLM 统一多平台模型调用
 
 不同厂商 API 标准各异，LiteLLM 将接口统一后，**换模型只需改一个字符串**，无需三套请求与错误处理：
@@ -103,7 +112,7 @@ Tatha/
 在 Tatha 内自建「抓职位 + 简历 vs 职位 LLM 打分 + 排序 Top-N」闭环，借鉴 Argus（职位源）与 DailyJobMatch（打分结构）。
 
 - **职位源**：`mock`（默认，5 条示例职位，无需 API Key）或 `apify_linkedin`（需 `APIFY_API_KEY`，从 Apify LinkedIn Job Scraper 拉取）。配置 `TATHA_JOB_SOURCE`、可选 `TATHA_JOB_TOP_N`（默认 5）。
-- **打分**：PydanticAI Agent 对「简历 + 职位描述」做多维度打分（`JobMatchScore`：overall、skills_overlap、experience_relevance 等），LiteLLM 统一切换模型。
+- **打分**：PydanticAI Agent 对「简历 + 职位描述」做多维度打分（`JobMatchScore`：overall、skills_overlap、experience_relevance 等），并纳入**钱多事少离家近**三维：salary_match（钱多）、location_match（离家近）、culture_workload_match（事少）；流水线会将职位「工作地点」拼入描述供模型参考。LiteLLM 统一切换模型。
 - **触发**：`POST /v1/ask` 意图为 `job_match` 时需提供简历（`resume_text` 或 `context.resume_text`）；或直接 `POST /v1/jobs/match`，body `{"resume_text": "..."}`。
 - **代码**：`tatha.jobs`（`sources`、`scoring`、`pipeline`）。
 
@@ -135,6 +144,8 @@ Tatha/
 ---
 
 ## 快速开始
+
+**V0 验收**：按《开发收敛与可交付路线图》要求，新成员可按 [docs/V0演示清单.md](docs/V0演示清单.md) 从环境准备到「上传简历 → 调用匹配 API → 看到匹配结果」跑通端到端链路。
 
 1. **环境**：Python 3.10+，建议使用虚拟环境或 [ServBay](https://www.servbay.com) 等一键环境。  
    **端口**：Tatha 默认使用 **8010**，避免与 ServBay 等占用 **8000** 的服务冲突；可在 `.env` 中设置 `TATHA_API_PORT`。

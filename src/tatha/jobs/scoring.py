@@ -28,8 +28,11 @@ def _job_match_agent():
             "- seniority: 职级匹配 0–10\n"
             "- language_requirement: 语言要求匹配 0–10\n"
             "- company_score: 公司/岗位吸引力 0–10\n"
-            "- overall: 综合分 0–100，为上述各项之和（若不足 6 项则按比例折算到 100）\n"
-            "同时填写 summary（一句话匹配摘要）、keywords（匹配关键词列表）、fit_bullets（匹配要点列表，最多 5 条）。"
+            "- salary_match: 钱多——薪资/待遇与候选人期望或市场匹配 0–10，未提及则 5\n"
+            "- location_match: 离家近——工作地点、远程/混合与候选人偏好匹配 0–10，未提及则 5\n"
+            "- culture_workload_match: 事少——工作强度、弹性、加班文化、团队氛围匹配 0–10，未提及则 5\n"
+            "- overall: 综合分 0–100，需综合考虑上述所有维度（含钱多、事少、离家近），为各项加权综合\n"
+            "同时填写 summary（一句话匹配摘要，可提及薪资/地点/强度亮点）、keywords、fit_bullets（最多 5 条）。"
         ),
     )
 
@@ -62,6 +65,9 @@ def score_resume_vs_job(resume_text: str, job_description: str) -> JobMatchScore
             seniority=0,
             language_requirement=0,
             company_score=0,
+            salary_match=5,
+            location_match=5,
+            culture_workload_match=5,
             summary=f"打分失败: {err_msg}",
             keywords=[],
             fit_bullets=[],
