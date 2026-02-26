@@ -24,6 +24,18 @@
 
 详见 [docs/设计说明_九库与Tatha.md](docs/设计说明_九库与Tatha.md)。
 
+### LiteLLM 统一多平台模型调用
+
+不同厂商 API 标准各异，LiteLLM 将接口统一后，**换模型只需改一个字符串**，无需三套请求与错误处理：
+
+- **环境**：任选其一配置 key 即可（`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`），LiteLLM 自动读取。
+- **默认模型**：`.env` 中 `TATHA_DEFAULT_MODEL`，例如 `openai/gpt-4o`、`deepseek/deepseek-chat`、`anthropic/claude-3-5-sonnet`。
+- **代码**：`tatha.core.llm` 提供：
+  - `ask_ai(prompt, model=None)`：单轮问答，返回回复正文；不传 `model` 用默认。
+  - `completion(model=None, messages=..., **kwargs)`：多轮或带 system 的完整调用，返回 LiteLLM response。
+
+中央大脑的意图解析、Marvin 提取等均通过该统一入口使用模型，对比 GPT / Claude / DeepSeek 效果时只需改配置或传入不同 `model`。
+
 ---
 
 ## 项目结构（概要）
@@ -52,6 +64,51 @@ Tatha/
 ## 单入口与中央大脑
 
 内部虽有解析、匹配、诗人 RAG、征信、MBTI 等多类能力与端口，**对用户/助理只暴露一个入口**：用户只提需求，由**中央大脑**解析意图并分发到对应内部处理端口，再统一返回。助理侧只需调用**单一 API**（如 `POST /v1/ask`），无需关心内部端口与路径。详见 [docs/架构_单入口与中央大脑.md](docs/架构_单入口与中央大脑.md)。
+
+### PydanticAI：文档解读的数据边界
+
+为避免 AI 在返回结构化数据时夹带「好的，这是你要的 JSON」等导致解析崩溃的文本，我们使用 **PydanticAI** 的 `result_type` 定义数据边界，把 AI 调用变成类型安全的函数调用。
+
+- **模型**：`ResumeAnalysis`、`PoetryAnalysis`、`CreditAnalysis`（见 `tatha.agents.schemas`），与简历/诗词/征信字段一一对应。
+- **智能体**：`tatha.agents.document_agents` 中为每种文档类型配置了 PydanticAI Agent（`result_type` + system_prompt），模型通过 **LiteLLM**（`pydantic-ai-litellm`）统一切换，与 `TATHA_DEFAULT_MODEL` 一致。
+- **使用**：`run_resume_analysis(text)`、`run_poetry_analysis(text)`、`run_credit_analysis(text)` 或统一入口 `run_document_analysis(document_type, text)`，返回类型化结果（如 `output.data.summary`）。
+- **后端切换**：`TATHA_DOCUMENT_ANALYSIS_BACKEND=pydantic_ai`（默认）使用上述 PydanticAI 边界；设为 `marvin` 时改用由 JSON schema 动态生成的 Marvin 提取器。
+
+中央大脑与 `POST /v1/documents/convert` 的解读逻辑均走该配置，默认使用 PydanticAI 边界。
+
+### 从 JSON 生产 Marvin 提取/分类函数
+
+文档类型不限于简历（resume），还包括诗词（poetry）、征信（credit）等。你只需提供**解析后的 JSON**（描述每种文档的字段或分类标签），即可自动生成 Marvin 风格的提取/分类函数，无需手写复杂 Prompt。
+
+- **JSON 结构**：`config/extractors_schema.example.json`  
+  - `document_types`：每种文档的 `description` + `fields`（name / type / description）→ 生成 `extract_<type>(text)`，返回结构化结果。  
+  - `classifiers`：每个分类任务的 `description` + `labels` → 生成 `classify_<name>(text)`。
+- **使用**：未配置 `TATHA_EXTRACTORS_SCHEMA` 时，默认加载 `config/extractors_schema.example.json`（若存在）。中央大脑在 `resume_upload` / `poetry` / `credit` 等意图下，若有对应提取器且用户消息带文本，会调用该提取函数并返回 `extracted` 字段。
+- **代码**：`tatha.ai` 下的 `load_schema`、`load_and_produce`、`get_extractor`、`get_classifier`。
+
+### 简历上传解析流程（MarkItDown + 提取）
+
+多格式文档（PDF/Word/Excel）先统一转 Markdown，再按文档类型做结构化提取，形成**高效解析标准流水线**：
+
+1. **上传**：`POST /v1/documents/convert`，表单字段 `file`（必填）、`document_type`（可选，默认 `resume`）。
+2. **转换**：使用 **MarkItDown** 将文件转为 Markdown（保留标题与表格结构，便于后续处理）。
+3. **提取**：默认使用 PydanticAI 类型安全边界（见上节）对 Markdown 做结构化解读；可配置为 Marvin（见「从 JSON 生产 Marvin」）。响应中返回 `extracted`。
+4. **说明**：扫描件或复杂图片表格效果会有波动，主要处理文字层。
+
+示例：`curl -X POST http://127.0.0.1:8010/v1/documents/convert -F "file=@resume.pdf" -F "document_type=resume"`。代码入口：`tatha.ingest.markitdown_convert`。
+
+### LlamaIndex：私有数据接入与 RAG
+
+数据源（尤其简历等个人信息）需隐私保护，索引与向量仅存于本地配置目录，不提交仓库。
+
+- **流程**：文档读取 → 索引构建（FAISS 向量库）→ 查询接口；LlamaIndex 提供完整链路，便于复杂文档与 RAG。
+- **存储**：`TATHA_INDEX_STORAGE` 指定索引根目录（默认 `.data/indices`）；`.data/` 已加入 `.gitignore`，简历等敏感数据不会进入版本库。
+- **命名空间**：按 `namespace` 隔离（如 `resume`、`poetry`），便于多类数据与多租户。
+- **构建索引**：
+  - `build_index_from_dir("./docs", namespace="resume")`：从目录读取所有文档并建索引；
+  - `build_index_from_documents(docs, namespace="resume")`：从内存文档（如上传转 Markdown 后）建索引，可不落盘原文。
+- **查询**：`get_query_engine(namespace="resume").query("总结文档的核心观点")`，或调用 `POST /v1/rag/query`，body `{"namespace": "resume", "query": "..."}`。
+- **LLM 统一切换**：RAG 回答使用的 LLM 由 **LiteLLM** + `TATHA_DEFAULT_MODEL` 提供（如 `deepseek/deepseek-chat`），与意图解析、PydanticAI 一致。索引用的 **embedding** 单独配置：`TATHA_EMBED_MODEL=local`（默认，本地 HuggingFace，无需 API Key，适配仅配 DeepSeek）或 `openai`；`TATHA_EMBED_DIM` 需与所选 embed 一致（local 默认 384，openai 默认 1536）。代码入口：`tatha.retrieval`。
 
 ---
 

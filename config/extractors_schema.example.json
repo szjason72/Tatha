@@ -1,0 +1,41 @@
+{
+  "document_types": {
+    "resume": {
+      "description": "从简历文本中提取结构化信息",
+      "fields": [
+        { "name": "name", "type": "string", "description": "姓名" },
+        { "name": "education", "type": "string", "description": "学历或毕业院校" },
+        { "name": "skills", "type": "string", "description": "技能关键词，逗号分隔" },
+        { "name": "experience_summary", "type": "string", "description": "工作经历摘要" }
+      ]
+    },
+    "poetry": {
+      "description": "从诗词或赏析文本中提取结构化信息",
+      "fields": [
+        { "name": "title", "type": "string", "description": "诗词标题" },
+        { "name": "author", "type": "string", "description": "作者" },
+        { "name": "dynasty", "type": "string", "description": "朝代" },
+        { "name": "content", "type": "string", "description": "正文或摘录句" },
+        { "name": "theme", "type": "string", "description": "主题或情感（如送别、思乡）" }
+      ]
+    },
+    "credit": {
+      "description": "从征信/信用相关文本中提取关键信息",
+      "fields": [
+        { "name": "entity_name", "type": "string", "description": "主体名称" },
+        { "name": "report_type", "type": "string", "description": "报告类型" },
+        { "name": "summary", "type": "string", "description": "摘要说明" }
+      ]
+    }
+  },
+  "classifiers": {
+    "doc_type": {
+      "description": "判断文档或用户输入属于哪一类（简历、诗词、征信、其他）",
+      "labels": ["resume", "poetry", "credit", "other"]
+    },
+    "product_tags": {
+      "description": "根据产品描述生成 3 个标签",
+      "labels": ["科技", "办公", "便携", "娱乐", "教育", "商务", "其他"]
+    }
+  }
+}

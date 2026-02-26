@@ -31,3 +31,39 @@ def use_llm_intent() -> bool:
 
 def get_default_model() -> str:
     return os.getenv("TATHA_DEFAULT_MODEL", "openai/gpt-4o")
+
+
+def get_extractors_schema_path() -> Path | None:
+    """提取器/分类器 JSON schema 路径；为空则使用默认示例路径（若存在）。"""
+    env_path = os.getenv("TATHA_EXTRACTORS_SCHEMA")
+    if env_path:
+        p = Path(env_path)
+        return p if p.exists() else None
+    default = Path(__file__).resolve().parents[2] / "config" / "extractors_schema.example.json"
+    return default if default.exists() else None
+
+
+def document_analysis_backend() -> str:
+    """文档解读后端：pydantic_ai（类型安全边界，默认）或 marvin（由 JSON schema 动态生成）。"""
+    return (os.getenv("TATHA_DOCUMENT_ANALYSIS_BACKEND") or "pydantic_ai").strip().lower()
+
+
+def embed_model_type() -> str:
+    """
+    索引/检索用的 embedding 模型类型。
+    openai = 使用 OpenAI embedding（需 OPENAI_API_KEY）；
+    local = 使用本地 HuggingFace（无需 API Key，适配仅配置 DeepSeek 的场景）。
+    """
+    return (os.getenv("TATHA_EMBED_MODEL") or "local").strip().lower()
+
+
+def get_index_storage_root() -> Path:
+    """
+    私有索引存储根目录（简历等敏感数据仅存于此，不提交到仓库）。
+    默认：项目根（与 pyproject.toml 同层）下的 .data/indices；可通过 TATHA_INDEX_STORAGE 覆盖。
+    """
+    env_path = os.getenv("TATHA_INDEX_STORAGE")
+    if env_path:
+        return Path(env_path)
+    # src/tatha/core/config.py -> parents[3] = 项目根
+    return Path(__file__).resolve().parents[3] / ".data" / "indices"

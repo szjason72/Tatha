@@ -4,10 +4,19 @@ Tatha 主仓 HTTP 入口：供 ZeroClaw 助理 Tool 调用。
 架构：单入口 + 中央大脑。用户/助理只调用一个入口（POST /v1/ask），
 需求由中央大脑解析并分发到内部各能力端口（解析、匹配、诗人 RAG、征信等），
 内部实现与端口对用户不可见。
-"""
-from fastapi import FastAPI
 
-from .schemas import AskRequest
+文档上传：POST /v1/documents/convert 使用 MarkItDown 转 Markdown，并可选做结构化提取（如简历）。
+"""
+import io
+from fastapi import FastAPI, File, Form, UploadFile
+
+from .schemas import (
+    AskRequest,
+    AskResponse,
+    DocumentConvertResponse,
+    RagQueryRequest,
+    RagQueryResponse,
+)
 from .central_brain import handle_ask
 
 app = FastAPI(
@@ -23,7 +32,79 @@ def health():
     return {"status": "ok", "service": "tatha"}
 
 
-@app.post("/v1/ask")
+@app.post("/v1/ask", response_model=AskResponse)
 def ask(request: AskRequest):
     """单入口：用户需求由此进入，中央大脑解析意图并分发到内部端口，返回统一 JSON。"""
     return handle_ask(request)
+
+
+@app.post("/v1/documents/convert", response_model=DocumentConvertResponse)
+async def documents_convert(
+    file: UploadFile = File(..., description="待转换文档（PDF/Word/Excel 等）"),
+    document_type: str | None = Form("resume", description="文档类型：resume / poetry / credit，用于选择提取器"),
+):
+    """
+    高效解析标准流程：MarkItDown 多格式 → Markdown，再按 document_type 做可选结构化提取。
+
+    支持格式：PDF、Word(.docx)、Excel(.xlsx)、PPT 等；扫描件或复杂图片表格效果会有波动。
+    """
+    try:
+        content = await file.read()
+    except Exception as e:
+        return DocumentConvertResponse(markdown="", error=f"读取文件失败: {e}")
+    if not content:
+        return DocumentConvertResponse(markdown="", error="文件为空")
+
+    try:
+        from tatha.ingest.markitdown_convert import stream_to_markdown
+
+        markdown = stream_to_markdown(
+            io.BytesIO(content),
+            filename=file.filename or None,
+        )
+    except Exception as e:
+        return DocumentConvertResponse(markdown="", error=f"MarkItDown 转换失败: {e}")
+
+    extracted = None
+    dtype = (document_type or "resume").strip().lower() or "resume"
+    if dtype and markdown:
+        try:
+            from tatha.api.central_brain import _document_analysis
+            extracted = _document_analysis(dtype, markdown)
+        except Exception as e:
+            return DocumentConvertResponse(
+                markdown=markdown,
+                document_type=dtype,
+                error=f"结构化提取失败: {e}",
+            )
+
+    return DocumentConvertResponse(
+        markdown=markdown,
+        document_type=dtype,
+        extracted=extracted,
+    )
+
+
+@app.post("/v1/rag/query", response_model=RagQueryResponse)
+def rag_query(request: RagQueryRequest):
+    """
+    对私有索引做 RAG 查询：仅使用已构建的命名空间索引，数据不离开本地。
+    需先通过 build_index_from_dir 或 build_index_from_documents 构建对应 namespace 的索引。
+    """
+    try:
+        from tatha.retrieval import get_query_engine
+        engine = get_query_engine(namespace=request.namespace)
+        answer = str(engine.query(request.query))
+        return RagQueryResponse(answer=answer, namespace=request.namespace)
+    except FileNotFoundError:
+        return RagQueryResponse(
+            answer="",
+            namespace=request.namespace,
+            error=f"索引不存在。请先用 build_index_from_dir 或 build_index_from_documents 构建 namespace={request.namespace} 的索引（存储于 .data/indices/<namespace>）。",
+        )
+    except Exception as e:
+        return RagQueryResponse(
+            answer="",
+            namespace=request.namespace,
+            error=str(e),
+        )

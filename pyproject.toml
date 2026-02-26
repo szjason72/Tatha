@@ -35,6 +35,9 @@ dependencies = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.20.0",
     "python-dotenv>=1.0.0",
+    "pydantic-ai-litellm>=0.2.3",
+    "llama-index-embeddings-huggingface>=0.6.1",
+    "llama-index-llms-litellm>=0.6.3",
 ]
 
 [project.optional-dependencies]
