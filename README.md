@@ -57,14 +57,15 @@ Tatha/
 
 ## 快速开始
 
-1. **环境**：Python 3.10+，建议使用虚拟环境或 [ServBay](https://www.servbay.com) 等一键环境。
+1. **环境**：Python 3.10+，建议使用虚拟环境或 [ServBay](https://www.servbay.com) 等一键环境。  
+   **端口**：Tatha 默认使用 **8010**，避免与 ServBay 等占用 **8000** 的服务冲突；可在 `.env` 中设置 `TATHA_API_PORT`。
 2. **依赖**：`pip install -r requirements.txt` 或 `uv sync`（若用 pyproject.toml）。
 3. **配置**：复制 `.env.example` 为 `.env`，填写 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`（或所用模型）、数据库与向量库连接等。
-4. **启动 API**（唯一对外端口，内部由中央大脑分发）：
+4. **启动 API**（唯一对外端口，内部由中央大脑分发）。默认用 **8010**，避免与 ServBay 等占用 8000 的服务冲突：
    ```bash
-   uv run uvicorn tatha.api.app:app --host 0.0.0.0 --port 8000
+   uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010
    ```
-5. **健康检查**：`curl -s http://127.0.0.1:8000/health`；用户/助理请求统一发往 `POST /v1/ask`（中央大脑入口，待实现）。
+5. **健康检查**：`curl -s http://127.0.0.1:8010/health`；用户/助理请求统一发往 `POST /v1/ask`。
 
 ---
 

@@ -7,6 +7,9 @@ Tatha 主仓 HTTP 入口：供 ZeroClaw 助理 Tool 调用。
 """
 from fastapi import FastAPI
 
+from .schemas import AskRequest
+from .central_brain import handle_ask
+
 app = FastAPI(
     title="Tatha API",
     description="Tatha 主仓：单入口 + 中央大脑，简历解析、匹配、诗人/诗词 RAG",
@@ -20,10 +23,7 @@ def health():
     return {"status": "ok", "service": "tatha"}
 
 
-# 单入口：用户需求由此进入，中央大脑解析后分发到内部端口（解析/匹配/诗人推荐/征信等）
-# TODO: 实现 POST /v1/ask — 请求体含 message/context，返回统一 JSON
-# @app.post("/v1/ask")
-# def ask(request: AskRequest):
-#     intent = central_brain.parse_intent(request.message)
-#     result = central_brain.dispatch(intent, request.context)
-#     return {"intent": intent, "result": result}
+@app.post("/v1/ask")
+def ask(request: AskRequest):
+    """单入口：用户需求由此进入，中央大脑解析意图并分发到内部端口，返回统一 JSON。"""
+    return handle_ask(request)
