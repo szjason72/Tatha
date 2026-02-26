@@ -6,9 +6,13 @@ Tatha 主仓 HTTP 入口：供 ZeroClaw 助理 Tool 调用。
 内部实现与端口对用户不可见。
 
 文档上传：POST /v1/documents/convert 使用 MarkItDown 转 Markdown，并可选做结构化提取（如简历）。
+
+可选演示页：GET /demo.html 返回单文件 demo.html（与 API 同源，便于浏览器直接体验匹配结果）。
 """
 import io
+import os
 from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from .schemas import (
     AskRequest,
@@ -28,10 +32,24 @@ app = FastAPI(
 )
 
 
+# 项目根目录（便于同源提供 demo.html，避免 CORS；app.py 在 src/tatha/api/）
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
 @app.get("/health")
 def health():
     """探活：唯一对外端口下的健康检查。"""
     return {"status": "ok", "service": "tatha"}
+
+
+@app.get("/demo.html", response_class=HTMLResponse)
+def serve_demo():
+    """可选演示页：单文件 HTML，调用 /v1/ask 与 /v1/jobs/match 并在页面展示结果。仅用于开发期直观感受。"""
+    path = os.path.join(_ROOT, "demo.html")
+    if not os.path.isfile(path):
+        return PlainTextResponse("demo.html not found", status_code=404)
+    with open(path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
 
 
 @app.post("/v1/ask", response_model=AskResponse)

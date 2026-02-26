@@ -156,6 +156,7 @@ Tatha/
    uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010
    ```
 5. **健康检查**：`curl -s http://127.0.0.1:8010/health`；用户/助理请求统一发往 `POST /v1/ask`。
+6. **可选：用浏览器打开演示页体验匹配结果**。启动 API 后访问 **http://127.0.0.1:8010/demo.html**（或直接打开仓库根目录下的 `demo.html` 文件；若遇 CORS，请通过上述同源 URL 访问）。单文件 HTML，调用 `POST /v1/jobs/match` 与 `POST /v1/ask`，在页面中展示匹配结果，仅用于开发期直观感受。
 
 ---
 

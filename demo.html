@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tatha 匹配体验</title>
+  <style>
+    :root { --bg: #0f0f12; --card: #1a1a20; --text: #e4e4e7; --muted: #71717a; --accent: #a78bfa; --border: #27272a; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.5rem; line-height: 1.5; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+    p.muted { color: var(--muted); font-size: 0.875rem; margin: 0 0 1rem; }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.8125rem; color: var(--muted); margin-bottom: 0.25rem; }
+    textarea { width: 100%; min-height: 100px; padding: 0.5rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.875rem; resize: vertical; }
+    input[type="text"] { width: 100%; padding: 0.5rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.875rem; }
+    .row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+    .row .field { flex: 1; min-width: 200px; }
+    button { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; cursor: pointer; font-weight: 500; }
+    button:hover { filter: brightness(1.1); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #out { margin-top: 1rem; white-space: pre-wrap; word-break: break-all; font-size: 0.8125rem; }
+    .match-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
+    .match-card h3 { margin: 0 0 0.25rem; font-size: 0.9375rem; }
+    .match-card .meta { color: var(--muted); font-size: 0.8125rem; margin-bottom: 0.25rem; }
+    .match-card .score { color: var(--accent); font-weight: 600; }
+    .match-card .summary { font-size: 0.8125rem; margin-top: 0.25rem; }
+    .error { color: #f87171; }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .tabs button { background: var(--card); color: var(--muted); }
+    .tabs button.active { background: var(--accent); color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Tatha 匹配体验</h1>
+  <p class="muted">单文件演示：调用 POST /v1/jobs/match 或 POST /v1/ask，在页面查看结果。请先启动 API（uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010）。</p>
+
+  <div class="tabs">
+    <button type="button" id="tab-match" class="active">职位匹配</button>
+    <button type="button" id="tab-ask">单入口 /v1/ask</button>
+  </div>
+
+  <div id="panel-match" class="panel">
+    <label>简历内容（摘要或全文）</label>
+    <textarea id="resume" placeholder="例如：张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+    <div style="margin-top: 0.75rem;">
+      <button type="button" id="btn-match">匹配岗位</button>
+    </div>
+    <div id="out-match"></div>
+  </div>
+
+  <div id="panel-ask" class="panel" style="display:none;">
+    <div class="row">
+      <div class="field">
+        <label>用户消息</label>
+        <input type="text" id="message" value="帮我匹配一下岗位" placeholder="例如：帮我匹配一下岗位" />
+      </div>
+    </div>
+    <label style="margin-top: 0.75rem;">简历内容（用于匹配时必填）</label>
+    <textarea id="resume-ask" placeholder="同上一栏">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+    <div style="margin-top: 0.75rem;">
+      <button type="button" id="btn-ask">发送 /v1/ask</button>
+    </div>
+    <div id="out-ask"></div>
+  </div>
+
+  <script>
+    (function () {
+      var base = '';
+      function out(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
+      function renderMatches(data) {
+        if (!data.matches || data.matches.length === 0) {
+          return '<p class="muted">无匹配结果。' + (data.error ? ' ' + data.error : '') + '</p>';
+        }
+        return data.matches.map(function (m) {
+          var job = m.job || {};
+          var score = m.score || {};
+          return '<div class="match-card">' +
+            '<h3>' + (job.title || '') + ' · ' + (job.company || '') + '</h3>' +
+            '<div class="meta">' + (job.location || '') + '</div>' +
+            '<div class="score">综合分 ' + (score.overall != null ? score.overall : '-') + '</div>' +
+            (score.summary ? '<div class="summary">' + score.summary + '</div>' : '') +
+            '</div>';
+        }).join('');
+      }
+      function renderAsk(data) {
+        if (!data) return '<p class="muted">无响应</p>';
+        var intent = data.intent || '';
+        var result = data.result || {};
+        var status = result.status || '';
+        var msg = result.message || '';
+        var html = '<p><strong>意图</strong> ' + intent + ' · <strong>状态</strong> ' + status + '</p><p>' + msg + '</p>';
+        if (result.matches && result.matches.length) html += renderMatches({ matches: result.matches });
+        if (result.extracted) html += '<pre class="muted" style="margin-top:0.5rem;font-size:0.75rem;">' + JSON.stringify(result.extracted, null, 2).slice(0, 800) + '</pre>';
+        return html;
+      }
+
+      document.getElementById('btn-match').onclick = function () {
+        var btn = this;
+        var resume = document.getElementById('resume').value.trim();
+        if (!resume) { out('out-match', '<p class="error">请填写简历内容</p>'); return; }
+        btn.disabled = true;
+        out('out-match', '<p class="muted">请求中…</p>');
+        fetch(base + '/v1/jobs/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume_text: resume, top_n: 5 })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) out('out-match', '<p class="error">' + data.error + '</p>');
+            else out('out-match', '<p class="muted">共 ' + (data.total_evaluated || 0) + ' 条参与打分</p>' + renderMatches(data));
+          })
+          .catch(function (e) {
+            out('out-match', '<p class="error">请求失败：' + e.message + '。请确认 API 已启动且与本页同源（如 http://127.0.0.1:8010/demo.html）</p>');
+          })
+          .then(function () { btn.disabled = false; });
+      };
+
+      document.getElementById('btn-ask').onclick = function () {
+        var btn = this;
+        var message = document.getElementById('message').value.trim();
+        var resume = document.getElementById('resume-ask').value.trim();
+        btn.disabled = true;
+        out('out-ask', '<p class="muted">请求中…</p>');
+        fetch(base + '/v1/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: message, resume_text: resume || undefined })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            out('out-ask', renderAsk(data));
+          })
+          .catch(function (e) {
+            out('out-ask', '<p class="error">请求失败：' + e.message + '</p>');
+          })
+          .then(function () { btn.disabled = false; });
+      };
+
+      document.getElementById('tab-match').onclick = function () {
+        document.getElementById('tab-match').classList.add('active');
+        document.getElementById('tab-ask').classList.remove('active');
+        document.getElementById('panel-match').style.display = 'block';
+        document.getElementById('panel-ask').style.display = 'none';
+      };
+      document.getElementById('tab-ask').onclick = function () {
+        document.getElementById('tab-ask').classList.add('active');
+        document.getElementById('tab-match').classList.remove('active');
+        document.getElementById('panel-ask').style.display = 'block';
+        document.getElementById('panel-match').style.display = 'none';
+      };
+    })();
+  </script>
+</body>
+</html>
