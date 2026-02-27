@@ -53,3 +53,15 @@ class JobMatchResponse(BaseModel):
     total_evaluated: int = Field(0, description="参与打分的职位数")
     message: Optional[str] = None
     error: Optional[str] = None
+
+
+class AuthLoginRequest(BaseModel):
+    """POST /v1/auth/login 请求（Web 端登录测试用）。"""
+    email: str = Field(..., description="邮箱")
+    password: str = Field(..., description="密码")
+
+
+class AuthRegisterRequest(BaseModel):
+    """POST /v1/auth/register 请求（Web 端注册测试用）。"""
+    email: str = Field(..., description="邮箱")
+    password: str = Field(..., min_length=6, description="密码，至少 6 位")

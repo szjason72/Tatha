@@ -2,7 +2,9 @@
 
 **Tatha** 是 JobFirst 收敛项目名称，面向「人生成长的分身系统」：从求职之路开始，以个人 AI 助理（ZeroClaw + 主仓 API）为交付形态，提供求职能力与日常陪伴（诗人/诗词、情绪价值），并坚持个人隐私与本地优先。
 
-本仓库为 **Tatha 主仓 Python 能力层**：简历解析、职位匹配、诗人/诗词 RAG、统一模型调用等，供 [ZeroClaw 助理](https://github.com/zeroclaw-labs/zeroclaw) 通过 HTTP Tool 调用。收敛与产品定义见 [JobFirst/docs/开发收敛与可交付路线图.md](../JobFirst/docs/开发收敛与可交付路线图.md)、[JobFirst 个人 AI 助理版（ZeroClaw 路线）](../JobFirst/docs/JobFirst个人AI助理版_ZeroClaw路线.md)。
+本仓库为 **Tatha 主仓 Python 能力层**：简历解析、职位匹配、诗人/诗词 RAG、统一模型调用等，供助理端通过 HTTP Tool 调用。助理侧采用自主可控的 **JobFirstClaw**（基于 ZeroClaw fork）+ 配套桌面方案，见 [开发收敛与可交付路线图 §六](../JobFirst/docs/开发收敛与可交付路线图.md#六可选路线个人-ai-助理版zeroclaw) 决策记录。收敛与产品定义见 [JobFirst/docs/开发收敛与可交付路线图.md](../JobFirst/docs/开发收敛与可交付路线图.md)、[JobFirst 个人 AI 助理版（ZeroClaw 路线）](../JobFirst/docs/JobFirst个人AI助理版_ZeroClaw路线.md)。
+
+**V1 交付前端**：本仓内 Web 页（`index.html` 认证订阅首屏、`auth.html` 登录/注册、`demo.html` 匹配体验）为 **V1 求职者 Web 闭环** 的选定前端，与主仓 API 同源部署；V1 不另在其它仓库铺前端功能。API 契约见 [docs/API契约_V1.md](docs/API契约_V1.md)。
 
 ---
 
@@ -156,7 +158,7 @@ Tatha/
    uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010
    ```
 5. **健康检查**：`curl -s http://127.0.0.1:8010/health`；用户/助理请求统一发往 `POST /v1/ask`。
-6. **可选：用浏览器打开演示页体验匹配结果**。启动 API 后访问 **http://127.0.0.1:8010/demo.html**（或直接打开仓库根目录下的 `demo.html` 文件；若遇 CORS，请通过上述同源 URL 访问）。单文件 HTML，调用 `POST /v1/jobs/match` 与 `POST /v1/ask`，在页面中展示匹配结果，仅用于开发期直观感受。
+6. **可选：用浏览器打开 Web 页面**。启动 API 后访问 **http://127.0.0.1:8010/** 进入**认证订阅页**（三档：免费/Basic/Pro，参考 ServBay 定价页形态）；点击「免费注册/体验」进入 **http://127.0.0.1:8010/demo.html** 匹配体验（单文件 HTML，调用 `POST /v1/jobs/match` 与 `POST /v1/ask`）。Web 页面形态说明（单页 HTML，暂无 Vue/Vite）见 [docs/Web页面说明.md](docs/Web页面说明.md)。
 
 ---
 

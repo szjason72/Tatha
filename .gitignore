@@ -28,3 +28,6 @@ build/
 
 # 私有索引与数据（简历等敏感数据，不提交）
 .data/
+
+# 本地验收输出（不提交）
+verify_v0_result.txt

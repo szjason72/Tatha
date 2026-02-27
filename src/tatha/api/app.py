@@ -11,12 +11,24 @@ Tatha 主仓 HTTP 入口：供 ZeroClaw 助理 Tool 调用。
 """
 import io
 import os
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+from .auth import AuthContext, get_auth
+from .quota import (
+    RESOURCE_ASK,
+    RESOURCE_JOB_MATCH,
+    RESOURCE_RAG,
+    RESOURCE_RESUME_PARSE,
+    consume,
+    clamp_top_n,
+)
+from .region import get_region_response
 from .schemas import (
     AskRequest,
     AskResponse,
+    AuthLoginRequest,
+    AuthRegisterRequest,
     DocumentConvertResponse,
     JobMatchRequest,
     JobMatchResponse,
@@ -42,19 +54,83 @@ def health():
     return {"status": "ok", "service": "tatha"}
 
 
-@app.get("/demo.html", response_class=HTMLResponse)
-def serve_demo():
-    """可选演示页：单文件 HTML，调用 /v1/ask 与 /v1/jobs/match 并在页面展示结果。仅用于开发期直观感受。"""
-    path = os.path.join(_ROOT, "demo.html")
+def _serve_html(filename: str):
+    path = os.path.join(_ROOT, filename)
     if not os.path.isfile(path):
-        return PlainTextResponse("demo.html not found", status_code=404)
+        return PlainTextResponse(f"{filename} not found", status_code=404)
     with open(path, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
 
+@app.get("/", response_class=HTMLResponse)
+@app.get("/index.html", response_class=HTMLResponse)
+def serve_index():
+    """认证订阅入口页：三档（免费/Basic/Pro），参考 ServBay 定价页形态。"""
+    return _serve_html("index.html")
+
+
+@app.get("/demo.html", response_class=HTMLResponse)
+def serve_demo():
+    """可选演示页：单文件 HTML，调用 /v1/ask 与 /v1/jobs/match 并在页面展示结果。仅用于开发期直观感受。"""
+    return _serve_html("demo.html")
+
+
+@app.get("/auth.html", response_class=HTMLResponse)
+def serve_auth():
+    """登录/注册页：Web 端登录注册测试用，当前为演示桩，未对接真实认证。"""
+    return _serve_html("auth.html")
+
+
+@app.get("/v1/region")
+def region(request: Request):
+    """
+    按请求 IP 返回地区与定价，供订阅页展示币种与价格。无需鉴权。
+    国内（CN）返回 CNY + pricing_cn，境外返回 USD + pricing_intl。
+    """
+    return get_region_response(request)
+
+
+@app.post("/v1/auth/login")
+def auth_login(request: AuthLoginRequest):
+    """
+    登录（演示桩）：接受邮箱+密码，返回 ok + token，供 Web 端登录测试。
+    未对接 Zervigo/真实认证，仅用于 V0 验收「登录页可提交并跳转」。
+    """
+    return {
+        "ok": True,
+        "message": "登录成功（演示用，未对接真实认证）",
+        "token": "demo-token-" + (request.email or "").replace("@", "-at-")[:32],
+    }
+
+
+@app.post("/v1/auth/register")
+def auth_register(request: AuthRegisterRequest):
+    """
+    注册（演示桩）：接受邮箱+密码，返回 ok + token，供 Web 端注册测试。
+    未对接 Zervigo/真实认证，仅用于 V0 验收「注册页可提交并跳转」。
+    """
+    return {
+        "ok": True,
+        "message": "注册成功（演示用，未对接真实认证）",
+        "token": "demo-token-" + (request.email or "").replace("@", "-at-")[:32],
+    }
+
+
+def _quota_exceeded_response():
+    return HTTPException(
+        status_code=429,
+        detail={
+            "code": "quota_exceeded",
+            "message": "当日配额已用尽，请升级后继续使用。",
+        },
+    )
+
+
 @app.post("/v1/ask", response_model=AskResponse)
-def ask(request: AskRequest):
-    """单入口：用户需求由此进入，中央大脑解析意图并分发到内部端口，返回统一 JSON。"""
+def ask(request: AskRequest, auth: AuthContext = Depends(get_auth)):
+    """单入口：用户需求由此进入，中央大脑解析意图并分发到内部端口，返回统一 JSON。V1 需鉴权与配额。"""
+    if not consume(auth.user_id, auth.tier, RESOURCE_ASK):
+        raise _quota_exceeded_response()
     return handle_ask(request)
 
 
@@ -62,12 +138,15 @@ def ask(request: AskRequest):
 async def documents_convert(
     file: UploadFile = File(..., description="待转换文档（PDF/Word/Excel 等）"),
     document_type: str | None = Form("resume", description="文档类型：resume / poetry / credit，用于选择提取器"),
+    auth: AuthContext = Depends(get_auth),
 ):
     """
     高效解析标准流程：MarkItDown 多格式 → Markdown，再按 document_type 做可选结构化提取。
-
-    支持格式：PDF、Word(.docx)、Excel(.xlsx)、PPT 等；扫描件或复杂图片表格效果会有波动。
+    V1 需鉴权与配额（resume 类型计入简历解析配额）。
     """
+    dtype = (document_type or "resume").strip().lower() or "resume"
+    if dtype == "resume" and not consume(auth.user_id, auth.tier, RESOURCE_RESUME_PARSE):
+        raise _quota_exceeded_response()
     try:
         content = await file.read()
     except Exception as e:
@@ -86,7 +165,6 @@ async def documents_convert(
         return DocumentConvertResponse(markdown="", error=f"MarkItDown 转换失败: {e}")
 
     extracted = None
-    dtype = (document_type or "resume").strip().lower() or "resume"
     if dtype and markdown:
         try:
             from tatha.api.central_brain import _document_analysis
@@ -106,17 +184,20 @@ async def documents_convert(
 
 
 @app.post("/v1/jobs/match", response_model=JobMatchResponse)
-def jobs_match(request: JobMatchRequest):
+def jobs_match(request: JobMatchRequest, auth: AuthContext = Depends(get_auth)):
     """
-    职位匹配流水线：拉取职位 → 简历 vs 职位 LLM 打分 → 按综合分排序返回 Top-N。
-    职位源默认 mock（示例数据）；配置 TATHA_JOB_SOURCE=apify_linkedin 与 APIFY_API_KEY 可使用 LinkedIn 抓取。
+    职位匹配流水线：拉取职位 → 简历 vs 职位 LLM 打分 → 按综合分排序返回 Top-N。V1 需鉴权与配额。
+    top_n 按档位限制（Free≤3，Basic≤5，Pro≤20）；超配额返回 429。
     """
+    if not consume(auth.user_id, auth.tier, RESOURCE_JOB_MATCH):
+        raise _quota_exceeded_response()
+    top_n = clamp_top_n(auth.tier, request.top_n or 5)
     try:
         from tatha.jobs import run_job_match_pipeline
 
         results, total = run_job_match_pipeline(
             resume_text=request.resume_text,
-            top_n=request.top_n,
+            top_n=top_n,
             source_id=request.source,
         )
         return JobMatchResponse(
@@ -128,11 +209,12 @@ def jobs_match(request: JobMatchRequest):
 
 
 @app.post("/v1/rag/query", response_model=RagQueryResponse)
-def rag_query(request: RagQueryRequest):
+def rag_query(request: RagQueryRequest, auth: AuthContext = Depends(get_auth)):
     """
-    对私有索引做 RAG 查询：仅使用已构建的命名空间索引，数据不离开本地。
-    需先通过 build_index_from_dir 或 build_index_from_documents 构建对应 namespace 的索引。
+    对私有索引做 RAG 查询：仅使用已构建的命名空间索引，数据不离开本地。V1 需鉴权与配额。
     """
+    if not consume(auth.user_id, auth.tier, RESOURCE_RAG):
+        raise _quota_exceeded_response()
     try:
         from tatha.retrieval import get_query_engine
         engine = get_query_engine(namespace=request.namespace)

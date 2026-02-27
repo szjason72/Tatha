@@ -26,23 +26,63 @@
     .match-card .score { color: var(--accent); font-weight: 600; }
     .match-card .summary { font-size: 0.8125rem; margin-top: 0.25rem; }
     .error { color: #f87171; }
+    .msg { font-size: 0.8125rem; margin-top: 0.5rem; }
+    .msg.ok { color: #22c55e; }
     .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .tabs button { background: var(--card); color: var(--muted); }
     .tabs button.active { background: var(--accent); color: #fff; }
+    button.btn-paste { background: var(--border); color: var(--text); flex-shrink: 0; padding: 0.5rem 0.75rem; }
+    button.btn-paste:hover { background: #3f3f46; }
+    .upload-area { border: 1px dashed var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .upload-area input[type="file"] { font-size: 0.8125rem; color: var(--muted); }
+    .resume-list { margin-top: 0.75rem; }
+    .resume-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+    .resume-item.selected { border-color: var(--accent); }
+    .resume-item .name { font-size: 0.875rem; font-weight: 500; }
+    .resume-item .preview { font-size: 0.75rem; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .resume-item button { padding: 0.35rem 0.75rem; font-size: 0.8125rem; }
+    .upgrade-banner { background: rgba(248,113,113,0.15); border: 1px solid #f87171; border-radius: 8px; padding: 0.75rem 1rem; margin-top: 0.5rem; font-size: 0.875rem; }
+    .upgrade-banner a { color: var(--accent); font-weight: 500; }
+    .match-card a { color: var(--accent); text-decoration: none; }
+    .match-card a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
+  <script>
+    (function () {
+      var token = localStorage.getItem('tatha_demo_token');
+      if (!token) {
+        window.location.replace('index.html');
+        return;
+      }
+    })();
+  </script>
   <h1>Tatha 匹配体验</h1>
-  <p class="muted">单文件演示：调用 POST /v1/jobs/match 或 POST /v1/ask，在页面查看结果。请先启动 API（uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010）。</p>
+  <p class="muted">单文件演示：调用 POST /v1/jobs/match 或 POST /v1/ask，在页面查看结果。请先启动 API（uv run uvicorn tatha.api.app:app --host 127.0.0.1 --port 8010）。<strong>若无法粘贴内容，请务必通过</strong> <a href="http://127.0.0.1:8010/demo.html" style="color:var(--accent)">http://127.0.0.1:8010/demo.html</a> <strong>访问本页（勿用 file:// 直接打开）。</strong> <a href="#" id="logout-link" style="margin-left:0.5rem;color:var(--accent)">退出登录</a></p>
 
   <div class="tabs">
+    <button type="button" id="tab-resume">简历</button>
     <button type="button" id="tab-match" class="active">职位匹配</button>
     <button type="button" id="tab-ask">单入口 /v1/ask</button>
   </div>
 
+  <div id="panel-resume" class="panel" style="display:none;">
+    <label>上传简历（PDF/Word 等）</label>
+    <div class="upload-area">
+      <input type="file" id="resume-file" accept=".pdf,.doc,.docx,.txt,.md" />
+      <button type="button" id="btn-upload-resume" style="margin-top:0.5rem;">上传并解析</button>
+      <div id="upload-status" class="msg muted" style="margin-top:0.5rem;font-size:0.8125rem;"></div>
+    </div>
+    <label>已解析简历（选中后可在「职位匹配」中使用）</label>
+    <div id="resume-list" class="resume-list"></div>
+  </div>
+
   <div id="panel-match" class="panel">
-    <label>简历内容（摘要或全文）</label>
-    <textarea id="resume" placeholder="例如：张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+    <label>简历内容（可从上方「简历」上传解析，或直接填写/粘贴）</label>
+    <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+      <textarea id="resume" placeholder="例如：张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。" autocomplete="on">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+      <button type="button" id="btn-paste-resume" class="btn-paste" title="从剪贴板粘贴">粘贴</button>
+    </div>
     <div style="margin-top: 0.75rem;">
       <button type="button" id="btn-match">匹配岗位</button>
     </div>
@@ -57,7 +97,10 @@
       </div>
     </div>
     <label style="margin-top: 0.75rem;">简历内容（用于匹配时必填）</label>
-    <textarea id="resume-ask" placeholder="同上一栏">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+    <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+      <textarea id="resume-ask" placeholder="同上一栏" autocomplete="on">张三，本科北京大学计算机系，擅长 Python、FastAPI、数据分析，有 3 年互联网产品经验。</textarea>
+      <button type="button" id="btn-paste-resume-ask" class="btn-paste" title="从剪贴板粘贴">粘贴</button>
+    </div>
     <div style="margin-top: 0.75rem;">
       <button type="button" id="btn-ask">发送 /v1/ask</button>
     </div>
@@ -67,6 +110,43 @@
   <script>
     (function () {
       var base = '';
+      function getAuthHeaders() {
+        var h = { 'Content-Type': 'application/json' };
+        var t = localStorage.getItem('tatha_demo_token');
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        return h;
+      }
+      function getAuthHeadersForUpload() {
+        var h = {};
+        var t = localStorage.getItem('tatha_demo_token');
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        return h;
+      }
+      function checkAuthAndRedirect(r) {
+        if (r.status === 401) {
+          localStorage.removeItem('tatha_demo_token');
+          window.location.replace('auth.html');
+          return true;
+        }
+        return false;
+      }
+      function renderUpgradeBanner(message) {
+        var msg = message || '当日配额已用尽，请升级后继续使用。';
+        return '<div class="upgrade-banner">' + msg + ' <a href="index.html">去订阅页升级</a></div>';
+      }
+      function handleRespAuthQuota(r, outElId) {
+        if (r.status === 403 || r.status === 429) {
+          return r.json().catch(function () { return {}; }).then(function (body) {
+            var detail = body.detail;
+            var msg = (detail && detail.message) ? detail.message : (r.status === 429 ? '当日配额已用尽，请升级后继续使用。' : '无权限，请升级档位。');
+            var el = document.getElementById(outElId);
+            if (el) el.innerHTML = renderUpgradeBanner(msg);
+            return Promise.reject(new Error('quota_or_forbidden'));
+          });
+        }
+        return Promise.resolve(r);
+      }
+
       function out(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
       function renderMatches(data) {
         if (!data.matches || data.matches.length === 0) {
@@ -75,8 +155,10 @@
         return data.matches.map(function (m) {
           var job = m.job || {};
           var score = m.score || {};
+          var titleText = (job.title || '') + ' · ' + (job.company || '');
+          var titleHtml = job.url ? ('<a href="' + job.url + '" target="_blank" rel="noopener">' + titleText + '</a>') : titleText;
           return '<div class="match-card">' +
-            '<h3>' + (job.title || '') + ' · ' + (job.company || '') + '</h3>' +
+            '<h3>' + titleHtml + '</h3>' +
             '<div class="meta">' + (job.location || '') + '</div>' +
             '<div class="score">综合分 ' + (score.overall != null ? score.overall : '-') + '</div>' +
             (score.summary ? '<div class="summary">' + score.summary + '</div>' : '') +
@@ -95,24 +177,128 @@
         return html;
       }
 
+      var resumeList = [];
+      var selectedResumeId = null;
+      try {
+        var saved = sessionStorage.getItem('tatha_resume_list');
+        if (saved) resumeList = JSON.parse(saved);
+      } catch (e) {}
+      function saveResumeList() {
+        try { sessionStorage.setItem('tatha_resume_list', JSON.stringify(resumeList)); } catch (e) {}
+      }
+      function renderResumeList() {
+        var container = document.getElementById('resume-list');
+        if (!container) return;
+        if (resumeList.length === 0) {
+          container.innerHTML = '<p class="muted">暂无简历，请先上传解析。</p>';
+          return;
+        }
+        container.innerHTML = resumeList.map(function (item) {
+          var preview = (item.markdown || '').slice(0, 60).replace(/\s+/g, ' ');
+          var isSelected = selectedResumeId === item.id;
+          return '<div class="resume-item' + (isSelected ? ' selected' : '') + '" data-id="' + item.id + '">' +
+            '<div><div class="name">' + (item.filename || '简历') + '</div>' +
+            '<div class="preview" title="' + (item.markdown || '').slice(0, 200) + '">' + (preview || '已解析') + '</div></div>' +
+            '<button type="button" class="btn-use-resume">用此简历匹配</button></div>';
+        }).join('');
+        container.querySelectorAll('.btn-use-resume').forEach(function (btn) {
+          btn.onclick = function () {
+            var id = this.closest('.resume-item').getAttribute('data-id');
+            var item = resumeList.find(function (r) { return r.id === id; });
+            if (item) {
+              selectedResumeId = id;
+              document.getElementById('resume').value = item.markdown || '';
+              renderResumeList();
+              document.getElementById('tab-match').click();
+            }
+          };
+        });
+      }
+
+      document.getElementById('btn-upload-resume').onclick = function () {
+        var input = document.getElementById('resume-file');
+        var statusEl = document.getElementById('upload-status');
+        if (!input.files || !input.files[0]) {
+          statusEl.textContent = '请先选择文件';
+          statusEl.className = 'msg error';
+          return;
+        }
+        var file = input.files[0];
+        statusEl.textContent = '解析中…';
+        statusEl.className = 'msg muted';
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('document_type', 'resume');
+        fetch(base + '/v1/documents/convert', {
+          method: 'POST',
+          headers: getAuthHeadersForUpload(),
+          body: fd
+        })
+          .then(function (r) {
+            if (checkAuthAndRedirect(r)) return Promise.reject(new Error('unauthorized'));
+            if (r.status === 429 || r.status === 403) {
+              return r.json().catch(function () { return {}; }).then(function (body) {
+                var detail = body.detail;
+                var msg = (detail && detail.message) ? detail.message : '当日解析配额已用尽，请升级后继续使用。';
+                statusEl.textContent = msg;
+                statusEl.className = 'msg error';
+                statusEl.innerHTML = msg + ' <a href="index.html" style="color:var(--accent)">去升级</a>';
+                return Promise.reject(new Error('quota'));
+              });
+            }
+            return r.json().catch(function () { return { error: '响应解析失败' }; });
+          })
+          .then(function (data) {
+            if (data.error) {
+              statusEl.textContent = data.error;
+              statusEl.className = 'msg error';
+              return;
+            }
+            statusEl.textContent = '解析成功';
+            statusEl.className = 'msg ok';
+            resumeList.unshift({
+              id: 'r-' + Date.now(),
+              filename: file.name,
+              markdown: data.markdown || '',
+              extracted: data.extracted || null
+            });
+            saveResumeList();
+            renderResumeList();
+            input.value = '';
+          })
+          .catch(function (e) {
+            if (e.message !== 'unauthorized' && e.message !== 'quota') {
+              statusEl.textContent = '请求失败：' + (e.message || '请确认 API 已启动');
+              statusEl.className = 'msg error';
+            }
+          });
+      };
+
       document.getElementById('btn-match').onclick = function () {
         var btn = this;
         var resume = document.getElementById('resume').value.trim();
-        if (!resume) { out('out-match', '<p class="error">请填写简历内容</p>'); return; }
+        if (!resume) { out('out-match', '<p class="error">请填写简历内容或从「简历」 tab 选择已解析简历</p>'); return; }
         btn.disabled = true;
         out('out-match', '<p class="muted">请求中…</p>');
         fetch(base + '/v1/jobs/match', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ resume_text: resume, top_n: 5 })
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (checkAuthAndRedirect(r)) return Promise.reject(new Error('unauthorized'));
+            return handleRespAuthQuota(r, 'out-match').then(function () { return r; });
+          })
+          .then(function (r) {
+            return r.json().catch(function () { return { error: '响应解析失败' }; });
+          })
           .then(function (data) {
             if (data.error) out('out-match', '<p class="error">' + data.error + '</p>');
             else out('out-match', '<p class="muted">共 ' + (data.total_evaluated || 0) + ' 条参与打分</p>' + renderMatches(data));
           })
           .catch(function (e) {
-            out('out-match', '<p class="error">请求失败：' + e.message + '。请确认 API 已启动且与本页同源（如 http://127.0.0.1:8010/demo.html）</p>');
+            if (e.message !== 'unauthorized' && e.message !== 'quota_or_forbidden')
+              out('out-match', '<p class="error">请求失败：' + e.message + '。请确认 API 已启动且与本页同源（如 http://127.0.0.1:8010/demo.html）</p>');
           })
           .then(function () { btn.disabled = false; });
       };
@@ -125,30 +311,71 @@
         out('out-ask', '<p class="muted">请求中…</p>');
         fetch(base + '/v1/ask', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({ message: message, resume_text: resume || undefined })
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (checkAuthAndRedirect(r)) return Promise.reject(new Error('unauthorized'));
+            return handleRespAuthQuota(r, 'out-ask').then(function () { return r; });
+          })
+          .then(function (r) {
+            return r.json().catch(function () { return {}; });
+          })
           .then(function (data) {
             out('out-ask', renderAsk(data));
           })
           .catch(function (e) {
-            out('out-ask', '<p class="error">请求失败：' + e.message + '</p>');
+            if (e.message !== 'unauthorized' && e.message !== 'quota_or_forbidden')
+              out('out-ask', '<p class="error">请求失败：' + e.message + '</p>');
           })
           .then(function () { btn.disabled = false; });
       };
 
+      document.getElementById('tab-resume').onclick = function () {
+        document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('active'); });
+        document.getElementById('tab-resume').classList.add('active');
+        document.getElementById('panel-resume').style.display = 'block';
+        document.getElementById('panel-match').style.display = 'none';
+        document.getElementById('panel-ask').style.display = 'none';
+        renderResumeList();
+      };
       document.getElementById('tab-match').onclick = function () {
+        document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('active'); });
         document.getElementById('tab-match').classList.add('active');
-        document.getElementById('tab-ask').classList.remove('active');
         document.getElementById('panel-match').style.display = 'block';
+        document.getElementById('panel-resume').style.display = 'none';
         document.getElementById('panel-ask').style.display = 'none';
       };
       document.getElementById('tab-ask').onclick = function () {
+        document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('active'); });
         document.getElementById('tab-ask').classList.add('active');
-        document.getElementById('tab-match').classList.remove('active');
         document.getElementById('panel-ask').style.display = 'block';
+        document.getElementById('panel-resume').style.display = 'none';
         document.getElementById('panel-match').style.display = 'none';
+      };
+
+      renderResumeList();
+
+      function pasteInto(el) {
+        if (!el) return;
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          navigator.clipboard.readText().then(function (text) {
+            el.value = text;
+            el.focus();
+          }).catch(function () {
+            alert('无法读取剪贴板，请使用 Ctrl+V 粘贴，或通过 http://127.0.0.1:8010/demo.html 访问本页后再试。');
+          });
+        } else {
+          alert('当前环境不支持一键粘贴，请使用 Ctrl+V（或 Cmd+V）粘贴。');
+        }
+      }
+      document.getElementById('btn-paste-resume').onclick = function () { pasteInto(document.getElementById('resume')); };
+      document.getElementById('btn-paste-resume-ask').onclick = function () { pasteInto(document.getElementById('resume-ask')); };
+
+      document.getElementById('logout-link').onclick = function (e) {
+        e.preventDefault();
+        localStorage.removeItem('tatha_demo_token');
+        window.location.href = 'index.html';
       };
     })();
   </script>

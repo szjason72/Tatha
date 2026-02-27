@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 / 注册 - Tatha</title>
+  <style>
+    :root { --bg: #0f0f12; --card: #1a1a20; --text: #e4e4e7; --muted: #71717a; --accent: #a78bfa; --border: #27272a; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem 1.5rem; line-height: 1.5; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .auth-box { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    .auth-box h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+    .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .tabs a { padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; color: var(--muted); background: transparent; }
+    .tabs a.active { background: var(--accent); color: #fff; }
+    .tabs a:hover:not(.active) { background: var(--border); color: var(--text); }
+    label { display: block; font-size: 0.8125rem; color: var(--muted); margin-bottom: 0.25rem; margin-top: 0.75rem; }
+    input[type="email"], input[type="password"], input[type="text"] {
+      width: 100%; padding: 0.5rem 0.75rem; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.875rem;
+    }
+    .btn { width: 100%; padding: 0.6rem 1rem; margin-top: 1rem; border-radius: 8px; font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; background: var(--accent); color: #fff; }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .msg { font-size: 0.8125rem; margin-top: 0.5rem; }
+    .msg.error { color: #f87171; }
+    .msg.ok { color: #22c55e; }
+    .back { margin-top: 1rem; text-align: center; }
+    .back a { color: var(--muted); font-size: 0.875rem; }
+    .back a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="auth-box">
+    <h1>登录 / 注册 Tatha</h1>
+    <p style="font-size:0.75rem;color:var(--muted);margin:0 0 0.75rem;">当前为演示模式，无需数据库与配置，注册/登录仅校验格式即返回成功。</p>
+    <div class="tabs">
+      <a href="#" id="tab-login" class="active">登录</a>
+      <a href="#" id="tab-register">注册</a>
+    </div>
+
+    <div id="panel-login" class="panel active">
+      <form id="form-login" action="javascript:void(0)" method="post">
+        <label>邮箱</label>
+        <input type="email" id="login-email" placeholder="your@email.com" required />
+        <label>密码</label>
+        <input type="password" id="login-password" placeholder="密码" required />
+        <div id="login-msg" class="msg"></div>
+        <button type="submit" class="btn" id="btn-login">登录</button>
+      </form>
+    </div>
+
+    <div id="panel-register" class="panel">
+      <form id="form-register" action="javascript:void(0)" method="post">
+        <label>邮箱</label>
+        <input type="email" id="register-email" placeholder="your@email.com" required />
+        <label>密码</label>
+        <input type="password" id="register-password" placeholder="至少 6 位" required minlength="6" />
+        <label>确认密码</label>
+        <input type="password" id="register-password2" placeholder="再次输入密码" required />
+        <div id="register-msg" class="msg"></div>
+        <button type="submit" class="btn" id="btn-register">注册</button>
+      </form>
+    </div>
+
+    <div class="back">
+      <a href="index.html">返回订阅页</a> · <a href="demo.html">直接进入匹配体验</a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var base = '';
+      function showPanel(name) {
+        document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+        document.querySelectorAll('.tabs a').forEach(function (a) { a.classList.remove('active'); });
+        var panel = document.getElementById('panel-' + name);
+        var tab = document.getElementById('tab-' + name);
+        if (panel) panel.classList.add('active');
+        if (tab) tab.classList.add('active');
+      }
+      document.getElementById('tab-login').onclick = function (e) { e.preventDefault(); showPanel('login'); };
+      document.getElementById('tab-register').onclick = function (e) { e.preventDefault(); showPanel('register'); };
+
+      function setMsg(id, text, isError) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'msg' + (isError ? ' error' : ' ok');
+      }
+
+      document.getElementById('form-login').onsubmit = function (e) {
+        e.preventDefault();
+        var email = document.getElementById('login-email').value.trim();
+        var password = document.getElementById('login-password').value;
+        var btn = document.getElementById('btn-login');
+        setMsg('login-msg', '');
+        btn.disabled = true;
+        fetch(base + '/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: password })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              setMsg('login-msg', data.message || '登录成功（演示）', false);
+              if (data.token) localStorage.setItem('tatha_demo_token', data.token);
+              setTimeout(function () { window.location.href = 'demo.html'; }, 800);
+            } else {
+              setMsg('login-msg', data.error || data.message || '登录失败', true);
+              btn.disabled = false;
+            }
+          })
+          .catch(function (err) {
+            setMsg('login-msg', '请求失败：' + (err.message || '请确认 API 已启动'), true);
+            btn.disabled = false;
+          });
+      };
+
+      document.getElementById('form-register').onsubmit = function (e) {
+        e.preventDefault();
+        var email = document.getElementById('register-email').value.trim();
+        var password = document.getElementById('register-password').value;
+        var password2 = document.getElementById('register-password2').value;
+        var btn = document.getElementById('btn-register');
+        setMsg('register-msg', '');
+        if (password !== password2) {
+          setMsg('register-msg', '两次密码不一致', true);
+          return;
+        }
+        btn.disabled = true;
+        fetch(base + '/v1/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: password })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              setMsg('register-msg', data.message || '注册成功（演示）', false);
+              if (data.token) localStorage.setItem('tatha_demo_token', data.token);
+              setTimeout(function () { window.location.href = 'demo.html'; }, 800);
+            } else {
+              setMsg('register-msg', data.error || data.message || '注册失败', true);
+              btn.disabled = false;
+            }
+          })
+          .catch(function (err) {
+            setMsg('register-msg', '请求失败：' + (err.message || '请确认 API 已启动'), true);
+            btn.disabled = false;
+          });
+      });
+
+      if (window.location.hash === '#register') showPanel('register');
+    })();
+  </script>
+</body>
+</html>
