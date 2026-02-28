@@ -11,6 +11,7 @@ Tatha 主仓 HTTP 入口：供 ZeroClaw 助理 Tool 调用。
 """
 import io
 import os
+from typing import Any
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -260,7 +261,7 @@ async def webhooks_payment(request: Request):
 
 
 @app.post("/v1/webhooks/stub-upgrade")
-def webhooks_stub_upgrade(body: StubUpgradeRequest) -> dict[str, str]:
+def webhooks_stub_upgrade(body: StubUpgradeRequest) -> dict[str, Any]:
     """
     仅未配置 Lemon Squeezy 时可用：本地 stub 模拟支付成功，直接写入档位，用于验证档位更新链路。
     """

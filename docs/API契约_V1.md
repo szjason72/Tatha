@@ -19,6 +19,9 @@
 | POST | `/v1/documents/convert` | 文档转 Markdown + 可选结构化提取 | **是** |
 | POST | `/v1/jobs/match` | 职位匹配 | **是** |
 | POST | `/v1/rag/query` | 私有索引 RAG 查询 | **是** |
+| POST | `/v1/orders/checkout` | 创建托管支付结账（阶段 7） | **是** |
+| POST | `/v1/webhooks/payment` | Lemon Squeezy 支付 Webhook | 否（签名校验） |
+| POST | `/v1/webhooks/stub-upgrade` | 本地 stub 写档位（仅未完整配置支付时可用） | 否 |
 
 ---
 
@@ -74,6 +77,24 @@
   - 响应：`{ "country": string, "currency": string, "locale": string, "pricing": object }`  
   - 无需鉴权，供订阅页按地区展示价格与币种。
 
+### 2.8 支付与档位（阶段 7，托管支付开箱用）
+
+- **POST /v1/orders/checkout**  
+  - 需鉴权。Body：`{ "tier": "basic" | "pro", "interval"?: "month" | "year", "return_url"?: string, "client_type"?: string }`  
+  - 响应：`{ "checkout_url": string, "tier": string, "interval": string }`  
+  - 未完整配置 Lemon Squeezy 时返回同源 stub URL（便于本地验收）；否则返回托管支付页 URL。  
+  - 400：tier/interval 非法；502：支付平台调用失败。
+
+- **POST /v1/webhooks/payment**  
+  - 供 Lemon Squeezy 回调；请求体为平台 JSON，需校验 `X-Signature`（HMAC）。  
+  - 校验失败返回 **401**；处理成功返回 200 与 `{ "ok": true, "tier"?: string, "user_id"?: string }`。
+
+- **POST /v1/webhooks/stub-upgrade**  
+  - 仅当**未**完整配置 Lemon Squeezy（缺 Store ID 或 Variant）时可用。  
+  - Body：`{ "user_id": string, "tier": "basic" | "pro" }`  
+  - 响应：`{ "ok": true, "tier": string, "user_id": string }`  
+  - 完整配置支付后此接口返回 **404**。
+
 ---
 
 ## 三、V1 统一错误码与前端约定（阶段 4 落地）
@@ -96,6 +117,6 @@
 
 - 请求/响应模型：`src/tatha/api/schemas.py`（AskRequest/AskResponse、JobMatchRequest/JobMatchResponse、DocumentConvertResponse、AuthLoginRequest/AuthRegisterRequest 等）。
 - 路由与实现：`src/tatha/api/app.py`。
-- V1 新增：`GET /v1/region`（阶段 3）；鉴权中间件与 401/403/429（阶段 2、4）。
+- V1 新增：`GET /v1/region`（阶段 3）；鉴权中间件与 401/403/429（阶段 2、4）；阶段 7 订单/Webhook 见 `src/tatha/api/orders.py`、`webhooks.py`。
 
-文档版本：与 V1 阶段任务拆解阶段 1.1 对齐；鉴权与配额实现后请同步更新「V1 鉴权」列与错误码说明。
+文档版本：与 V1 阶段任务拆解阶段 1.1 对齐；阶段 7 已补全端点与契约。
