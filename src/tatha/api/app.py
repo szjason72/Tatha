@@ -29,13 +29,18 @@ from .schemas import (
     AskResponse,
     AuthLoginRequest,
     AuthRegisterRequest,
+    CheckoutRequest,
+    CheckoutResponse,
     DocumentConvertResponse,
     JobMatchRequest,
     JobMatchResponse,
     RagQueryRequest,
     RagQueryResponse,
+    StubUpgradeRequest,
 )
 from .central_brain import handle_ask
+from .orders import create_checkout
+from .webhooks import handle_payment_webhook, handle_stub_upgrade
 
 app = FastAPI(
     title="Tatha API",
@@ -232,3 +237,31 @@ def rag_query(request: RagQueryRequest, auth: AuthContext = Depends(get_auth)):
             namespace=request.namespace,
             error=str(e),
         )
+
+
+# ---------- 阶段 7：托管支付开箱用 ----------
+
+@app.post("/v1/orders/checkout", response_model=CheckoutResponse)
+def orders_checkout(body: CheckoutRequest, auth: AuthContext = Depends(get_auth)):
+    """
+    创建托管支付结账：需鉴权，入参 tier/interval/return_url，返回 checkout_url。
+    未配置 Lemon Squeezy 时返回 stub URL，便于本地用 stub Webhook 验证档位更新。
+    """
+    return create_checkout(auth, body)
+
+
+@app.post("/v1/webhooks/payment")
+async def webhooks_payment(request: Request):
+    """
+    Lemon Squeezy Webhook：校验 X-Signature 后处理 order_created/subscription_created，
+    将 meta.custom_data.user_id 对应档位写入 tier_store，下次鉴权生效。
+    """
+    return await handle_payment_webhook(request)
+
+
+@app.post("/v1/webhooks/stub-upgrade")
+def webhooks_stub_upgrade(body: StubUpgradeRequest) -> dict[str, str]:
+    """
+    仅未配置 Lemon Squeezy 时可用：本地 stub 模拟支付成功，直接写入档位，用于验证档位更新链路。
+    """
+    return handle_stub_upgrade(body.user_id, body.tier)

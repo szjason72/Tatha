@@ -108,7 +108,8 @@
             if (data.ok) {
               setMsg('login-msg', data.message || '登录成功（演示）', false);
               if (data.token) localStorage.setItem('tatha_demo_token', data.token);
-              setTimeout(function () { window.location.href = 'demo.html'; }, 800);
+              var redirect = new URLSearchParams(window.location.search).get('redirect') || 'demo.html';
+              setTimeout(function () { window.location.href = redirect; }, 800);
             } else {
               setMsg('login-msg', data.error || data.message || '登录失败', true);
               btn.disabled = false;
@@ -142,7 +143,8 @@
             if (data.ok) {
               setMsg('register-msg', data.message || '注册成功（演示）', false);
               if (data.token) localStorage.setItem('tatha_demo_token', data.token);
-              setTimeout(function () { window.location.href = 'demo.html'; }, 800);
+              var redirect = new URLSearchParams(window.location.search).get('redirect') || 'demo.html';
+              setTimeout(function () { window.location.href = redirect; }, 800);
             } else {
               setMsg('register-msg', data.error || data.message || '注册失败', true);
               btn.disabled = false;
@@ -152,7 +154,7 @@
             setMsg('register-msg', '请求失败：' + (err.message || '请确认 API 已启动'), true);
             btn.disabled = false;
           });
-      });
+      };
 
       if (window.location.hash === '#register') showPanel('register');
     })();

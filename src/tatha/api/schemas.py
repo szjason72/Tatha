@@ -65,3 +65,24 @@ class AuthRegisterRequest(BaseModel):
     """POST /v1/auth/register 请求（Web 端注册测试用）。"""
     email: str = Field(..., description="邮箱")
     password: str = Field(..., min_length=6, description="密码，至少 6 位")
+
+
+class CheckoutRequest(BaseModel):
+    """POST /v1/orders/checkout：创建托管支付结账，需鉴权。"""
+    tier: str = Field(..., description="档位：basic | pro")
+    interval: str = Field("month", description="周期：month | year")
+    return_url: str | None = Field(None, description="支付成功后跳转的 URL，不传则用前端当前页")
+    client_type: str | None = Field(None, description="可选：web | miniapp | h5，供后续多端统计")
+
+
+class CheckoutResponse(BaseModel):
+    """POST /v1/orders/checkout 响应。"""
+    checkout_url: str = Field(..., description="托管支付页 URL，前端跳转此地址完成付款")
+    tier: str = Field(..., description="请求的档位")
+    interval: str = Field(..., description="请求的周期")
+
+
+class StubUpgradeRequest(BaseModel):
+    """POST /v1/webhooks/stub-upgrade：仅未配置支付时用于本地 stub 验证档位更新。"""
+    user_id: str = Field(..., description="用户 ID")
+    tier: str = Field(..., description="档位：basic | pro")
