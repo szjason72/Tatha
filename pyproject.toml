@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tatha"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tatha 主仓能力层：简历解析、匹配、诗人/诗词 RAG，基于九库统一模型与文档链路"
 readme = "README.md"
 requires-python = ">=3.10"
