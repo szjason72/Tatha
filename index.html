@@ -48,6 +48,9 @@
       flex-direction: column;
     }
     .card.popular { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .card[data-tier] { cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+    .card[data-tier]:hover { border-color: var(--muted); }
+    .card[data-tier].selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
     .card h2 { font-size: 1.25rem; margin: 0 0 0.25rem; }
     .card .tag { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem; }
     .card .price { font-size: 1.5rem; font-weight: 700; color: var(--accent); margin: 0.5rem 0; }
@@ -82,17 +85,28 @@
     .footer-nav { text-align: center; margin-top: 2rem; }
     .footer-nav a { color: var(--muted); font-size: 0.875rem; margin: 0 0.75rem; }
     .footer-nav a:hover { color: var(--accent); }
+    .banner { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.5rem; text-align: center; }
+    .banner.upgraded { background: rgba(34, 197, 94, 0.15); border: 1px solid var(--accent-green); color: var(--accent-green); }
+    .stub-panel { background: var(--card); border: 1px dashed var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .stub-panel h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+    .stub-panel p { color: var(--muted); font-size: 0.875rem; margin: 0 0 1rem; }
   </style>
 </head>
 <body>
   <div class="container">
+    <div id="banner-upgraded" class="banner upgraded" style="display:none;">升级成功，您的档位已生效。前往 <a href="demo.html" style="color:inherit;text-decoration:underline;">使用页</a> 体验更多额度。</div>
+    <div id="stub-panel" class="stub-panel" style="display:none;">
+      <h3>Stub 结账页（本地测试）</h3>
+      <p id="stub-info">正在加载…</p>
+      <button type="button" id="stub-confirm-btn" class="btn btn-primary">模拟支付成功</button>
+    </div>
     <div class="hero">
       <h1>可持续的求职与陪伴</h1>
       <p>我们相信，你的成长与体验值得被认真对待。注册即享免费额度，按需升级。</p>
     </div>
 
-    <div class="cards">
-      <div class="card">
+    <div class="cards" id="tier-cards">
+      <div class="card" data-tier="free" role="button" tabindex="0">
         <h2>免费版</h2>
         <div class="tag">Free</div>
         <div class="price">¥0 <span>永久免费</span></div>
@@ -108,7 +122,7 @@
         </div>
       </div>
 
-      <div class="card popular">
+      <div class="card popular" data-tier="basic" role="button" tabindex="0">
         <h2>基础版</h2>
         <div class="tag">Basic · 推荐</div>
         <div class="price" data-region-price="basic_monthly"><span class="currency-symbol">¥</span><span class="price-value">--</span> <span>/ 月</span></div>
@@ -118,10 +132,10 @@
           <li>每日 15 次 /v1/ask，5 份解析</li>
           <li>诗人/诗词 10 次/日</li>
         </ul>
-        <a href="auth.html#login" class="btn btn-primary">立即订阅</a>
+        <button type="button" class="btn btn-primary btn-subscribe" data-tier="basic">立即订阅</button>
       </div>
 
-      <div class="card">
+      <div class="card" data-tier="pro" role="button" tabindex="0">
         <h2>Pro 版</h2>
         <div class="tag">Pro</div>
         <div class="price" data-region-price="pro_monthly"><span class="currency-symbol">¥</span><span class="price-value">--</span> <span>/ 月</span></div>
@@ -131,7 +145,7 @@
           <li>诗人、征信、MBTI 全部开放</li>
           <li>可选优先支持</li>
         </ul>
-        <a href="auth.html#login" class="btn btn-secondary">立即订阅</a>
+        <button type="button" class="btn btn-secondary btn-subscribe" data-tier="pro">立即订阅</button>
       </div>
     </div>
 
@@ -143,6 +157,9 @@
   </div>
   <script>
     (function() {
+      var TOKEN_KEY = 'tatha_demo_token';
+
+      // 地区与价格
       fetch('/v1/region')
         .then(function(r) { return r.ok ? r.json() : Promise.reject(r); })
         .then(function(data) {
@@ -160,6 +177,85 @@
         .catch(function() {
           document.querySelectorAll('.price-value').forEach(function(n) { if (n) n.textContent = '--'; });
         });
+
+      // 回站：?upgraded=1 显示成功提示
+      var params = new URLSearchParams(location.search);
+      if (params.get('upgraded') === '1') {
+        document.getElementById('banner-upgraded').style.display = 'block';
+      }
+
+      // Stub 结账页：?stub_checkout=1&tier=...&user_id=...&return_url=...
+      if (params.get('stub_checkout') === '1') {
+        var tier = params.get('tier') || '';
+        var userId = params.get('user_id') || '';
+        var returnUrl = params.get('return_url') || (location.origin + location.pathname + '?upgraded=1');
+        var panel = document.getElementById('stub-panel');
+        var info = document.getElementById('stub-info');
+        var btn = document.getElementById('stub-confirm-btn');
+        panel.style.display = 'block';
+        info.textContent = '档位: ' + tier + '，user_id: ' + userId + '。点击下方按钮模拟支付成功并写档位。';
+        btn.onclick = function() {
+          btn.disabled = true;
+          fetch('/v1/webhooks/stub-upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, tier: tier })
+          })
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+            .then(function() { window.location.href = decodeURIComponent(returnUrl); })
+            .catch(function() { btn.disabled = false; alert('请求失败'); });
+        };
+      }
+
+      // 档位选择：点击卡片切换选中状态（免费/基础/Pro）
+      document.querySelectorAll('.card[data-tier]').forEach(function(card) {
+        card.addEventListener('click', function(e) {
+          var tier = card.getAttribute('data-tier');
+          document.querySelectorAll('.card[data-tier]').forEach(function(c) { c.classList.remove('selected'); });
+          card.classList.add('selected');
+          if (e.target.closest('a')) return;
+          if (e.target.closest('button')) return;
+          e.preventDefault();
+        });
+        card.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            card.click();
+          }
+        });
+      });
+      var defaultCard = document.querySelector('.card[data-tier="basic"]');
+      if (defaultCard) defaultCard.classList.add('selected');
+
+      // 立即订阅：需登录，调 checkout 后跳转（使用当前点击按钮的 data-tier）
+      document.querySelectorAll('.btn-subscribe').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var token = localStorage.getItem(TOKEN_KEY);
+          if (!token) {
+            var redirect = location.pathname + location.search;
+            window.location.href = 'auth.html?redirect=' + encodeURIComponent(redirect || 'index.html');
+            return;
+          }
+          var tier = this.getAttribute('data-tier');
+          var returnUrl = location.origin + location.pathname + '?upgraded=1';
+          btn.disabled = true;
+          fetch('/v1/orders/checkout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ tier: tier, interval: 'month', return_url: returnUrl })
+          })
+            .then(function(r) { return r.ok ? r.json() : Promise.reject(r); })
+            .then(function(data) {
+              if (data.checkout_url) window.location.href = data.checkout_url;
+              else btn.disabled = false;
+            })
+            .catch(function() { btn.disabled = false; alert('获取支付页失败，请稍后重试'); });
+        });
+      });
     })();
   </script>
 </body>

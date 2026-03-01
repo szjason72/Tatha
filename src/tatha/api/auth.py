@@ -72,10 +72,19 @@ def verify_token(token: str) -> AuthContext | None:
     return _verify_token_stub(token)
 
 
+def _apply_tier_override(ctx: AuthContext) -> AuthContext:
+    """若本地有支付开通的档位覆盖，则覆盖认证返回的 tier（阶段 7）。"""
+    from .tier_store import get_tier
+    override = get_tier(ctx.user_id)
+    if override:
+        return AuthContext(user_id=ctx.user_id, tier=override)
+    return ctx
+
+
 def get_auth(authorization: str | None = Header(None, alias="Authorization")) -> AuthContext:
     """
     依赖项：从请求头取 token，校验后返回 AuthContext；无 token 或校验失败抛出 401。
-    用于需要鉴权的路由：/v1/ask、/v1/jobs/match、/v1/documents/convert、/v1/rag/query。
+    档位优先使用支付/订阅开通的本地覆盖（tier_store），再使用量子认证/stub 返回的 tier。
     """
     token = get_bearer_token(authorization)
     if not token:
@@ -83,4 +92,4 @@ def get_auth(authorization: str | None = Header(None, alias="Authorization")) ->
     ctx = verify_token(token)
     if ctx is None:
         raise HTTPException(status_code=401, detail="invalid or expired token")
-    return ctx
+    return _apply_tier_override(ctx)
